@@ -10,7 +10,14 @@ require "pluginfactory"
 require "test/unit"
 
 class FactoryTests < Test::Unit::TestCase
-
+	
+	def setup
+		if $DEBUG
+			PluginFactory.logger_callback = lambda {|lvl, msg|
+				$deferr.puts msg
+			}
+		end
+	end
 
 	def test_01_inclusion 
 		assert_nothing_raised		{require "mybase"}
