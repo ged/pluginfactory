@@ -1,3 +1,3 @@
-require 'mybase'
+require 'subofmybase'
 
-class DeepSubOfMyBase < SubOfMyBase; end
+class DeepSubOf < SubOfMyBase; end
