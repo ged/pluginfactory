@@ -1,6 +1,6 @@
-# install.rb
+#!/usr/bin/ruby -w
 #
-# $Date: 2004/03/07 23:41:51 $
+# $Date$
 # Copyright (c) 2000 Masatoshi SEKI
 #
 # install.rb is copyrighted free software by Masatoshi SEKI.
