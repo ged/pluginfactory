@@ -1,3 +1,10 @@
+2004-03-09 22:32  Michael Granger <ged@FaerieMUD.org>
+
+	* makedist.rb (1.1), utils.rb (1.1), docs/.cvsignore (1.1),
+	docs/CATALOG (1.1), docs/makedocs.rb (1.1):
+
+	Initial checkin.
+	
 2004-03-08 00:07  Michael Granger <ged@FaerieMUD.org>
 
 	* tests/: othersub.rb (1.2), dir/deepsubofmybase.rb (1.2):
