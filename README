@@ -5,7 +5,9 @@ request.
 
 == Install
 
-$ sudo ./install.rb
+$ ./install.rb setup
+$ ./install.rb config
+$ sudo ./install.rb install
 
 == Tests
 
@@ -36,4 +38,4 @@ FITNESS FOR A PARTICULAR PURPOSE.
 
 == Rcsid
 
-   $Id: README,v 1.2 2004/03/07 22:36:44 stillflame Exp $
+   $Id: README,v 1.3 2004/03/07 23:42:11 stillflame Exp $
