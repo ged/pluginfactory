@@ -4,9 +4,8 @@ require "pluginfactory"
 
 class MyBase
 	include PluginFactory
-	def derivativeDirs 
-		[".", "dir"].map {|dir|
-			File.join(File.dirname(__FILE__), dir)
-		}
+	def self::derivativeDirs 
+		testdir = File::expand_path( File.dirname(__FILE__) )
+		return [ testdir, File::join(testdir, "dir") ]
 	end
 end
