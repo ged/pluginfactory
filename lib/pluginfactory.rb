@@ -270,7 +270,7 @@ module PluginFactory
 		# Check to see if the specified listener is now loaded. If it
 		# is not, raise an error to that effect.
 		unless self.derivatives[ className.downcase ]
-			raise RuntimeError,
+			raise FactoryError,
 				"Couldn't find a %s named '%s'. Loaded derivatives are: %p" % [
 				self.factoryType,
 				className.downcase,
