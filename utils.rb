@@ -12,6 +12,7 @@
 BEGIN {
 	require 'rbconfig'
 	require 'uri'
+	require 'find'
 
 	begin
 		require 'readline'
@@ -67,6 +68,13 @@ module UtilityFunctions
 
 	ErasePreviousLine = "\033[A\033[K"
 
+	ManifestHeader = (<<-"EOF").gsub( /^\t+/, '' )
+		#
+		# Distribution Manifest
+		# Created: #{Time::now.to_s}
+		# 
+
+	EOF
 
 	###############
 	module_function
@@ -267,7 +275,7 @@ module UtilityFunctions
 				verboseMsg( "Project is versioned via Subversion" )
 
 				if (( svn = findProgram('svn') ))
-					output = %x{svn pg project-version}
+					output = %x{svn pg project-version}.chomp
 					unless output.empty?
 						verboseMsg( "Using 'project-version' property: %p" % output )
 						release = output.split( /[._]/ ).collect {|s| Integer(s) rescue 0}
@@ -329,7 +337,7 @@ module UtilityFunctions
 					output = shellCommand( svn, 'pg', 'project-name' )
 					if !output.empty?
 						verboseMsg( "Using 'project-name' property: %p" % output )
-						name = output.first
+						name = output.first.chomp
 
 					# If that doesn't work, try to figure it out from the URL
 					elsif (( uri = getSvnUri() ))
@@ -366,6 +374,36 @@ module UtilityFunctions
 	end
 
 
+	### (Re)make a manifest file in the specified +path+.
+	def makeManifest( path="MANIFEST" )
+		if File::exists?( path )
+			reply = promptWithDefault( "Replace current '#{path}'? [yN]", "n" )
+			return false unless /^y/i.match( reply )
+
+			verboseMsg "Replacing manifest at '#{path}'"
+		else
+			verboseMsg "Creating new manifest at '#{path}'"
+		end
+
+		files = []
+		verboseMsg( "Finding files...\n" )
+		Find::find( Dir::pwd ) do |f|
+			Find::prune if File::directory?( f ) &&
+				/^\./.match( File::basename(f) )
+			verboseMsg( "  found: #{f}\n" )
+			files << f.sub( %r{^#{Dir::pwd}/?}, '' )
+		end
+		files = vetManifest( files )
+		
+		verboseMsg( "Writing new manifest to #{path}..." )
+		File::open( path, File::WRONLY|File::CREAT|File::TRUNC ) do |ofh|
+			ofh.puts( ManifestHeader )
+			ofh.puts( files )
+		end
+		verboseMsg( "done." )
+	end
+
+
 	### Read the specified <tt>manifestFile</tt>, which is a text file
 	### describing which files to package up for a distribution. The manifest
 	### should consist of one or more lines, each containing one filename or
@@ -394,7 +432,7 @@ module UtilityFunctions
 	### Given a <tt>filelist</tt> like that returned by #readManifest, remove
 	### the entries therein which match the Regexp objects in the given
 	### <tt>antimanifest</tt> and return the resultant Array.
-	def vetManifest( filelist, antimanifest=ANITMANIFEST )
+	def vetManifest( filelist, antimanifest=ANTIMANIFEST )
 		origLength = filelist.length
 		verboseMsg "Vetting manifest..."
 

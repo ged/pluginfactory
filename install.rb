@@ -22,7 +22,7 @@ require 'find'
 require 'ftools'
 require 'optparse'
 
-$version	= %q$Revision: 1.4 $
+$version	= %q$Revision$
 $rcsId		= %q$Id$
 
 # Define required libraries
