@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby -w
 #
-# [<tt>Factory</tt>]
+# [<tt>PluginFactory</tt>]
 #    A mixin that adds Factory design pattern-like behaviour to the including
 #    class.  Autoloads files based on class name.
 #
@@ -8,10 +8,10 @@
 # 
 #---##### in myclass.rb #####---
 # 
-#	require "factory"
+#	require "PluginFactory"
 #
 #	class MyClass
-#		include Factory
+#		include PluginFactory
 #		def derivativeDirs() ["some/dir"] end
 #	end
 # 
@@ -45,7 +45,7 @@
 # 
 # == Rcsid
 # 
-# $Id: pluginfactory.rb,v 1.1 2004/03/07 17:33:10 stillflame Exp $
+# $Id: pluginfactory.rb,v 1.2 2004/03/07 18:49:23 stillflame Exp $
 # 
 # == Authors
 # 
@@ -59,27 +59,55 @@
 #
 
 
-### A mixin that adds factory class methods to a base class, so that
+### An exception class for PluginFactory specific errors.
+class FactoryError < Exception
+	def initialize( *args )
+		if ! args.empty?
+			msg = args.collect {|a| a.to_s}.join
+			super( msg )
+		else
+			super( message )
+		end					
+	end
+end # class FactoryError
+
+
+### A mixin that adds PluginFactory class methods to a base class, so that
 ### subclasses may be instantiated by name.
-module Factory
+module PluginFactory
 
-	### Inclusion callback -- extends the including class.
-	def self::included( klass )
-		klass.extend( self )
-		klass.extend( TypeCheckFunctions )
-	end
+	class << self
 
 
-	### Raise an exception if the object being extended is anything but a
-	### class.
-	def self::extend_object( obj )
-		unless obj.is_a?( Class )
-			raise TypeError, "Cannot extend a #{obj.class.name}", caller(1)
+		### A callback for logging the various debug and information this module
+		### has to log.  Should take two arguments, the log level, possibly as a
+		### symbol, and the log message itself.
+		attr_accessor :logger_callback
+
+
+		### If the logger callback is set, use it to pass on a log entry.  First argument is 
+		def log(level, *msg)
+			@logger_callback.call(level, msg.join) if @logger_callback
 		end
-		obj.instance_variable_set( :@derivatives, {} )
-		super
-	end
 
+
+		### Inclusion callback -- extends the including class.
+		def included( klass )
+			klass.extend( self )
+		end
+
+
+		### Raise an exception if the object being extended is anything but a
+		### class.
+		def extend_object( obj )
+			unless obj.is_a?( Class )
+				raise TypeError, "Cannot extend a #{obj.class.name}", caller(1)
+			end
+			obj.instance_variable_set( :@derivatives, {} )
+			super
+		end
+
+	end # class << self
 
 	#############################################################
 	###	M I X I N   M E T H O D S
@@ -106,7 +134,7 @@ module Factory
 			end
 		}
 
-		raise Arrow::FactoryError, "Couldn't find factory base for #{self.name}" if
+		raise FactoryError, "Couldn't find factory base for #{self.name}" if
 			base.nil?
 
 		if base.name =~ /^.*::(.*)/
@@ -128,7 +156,7 @@ module Factory
 				subclass.name.sub( /.*::/, '' ).downcase
 			end
 
-		Arrow::Logger.info "Registering %s derivative of %s as %s" %
+		PluginFactory.log :info, "Registering %s derivative of %s as %s" %
 			[ subclass.name, self.name, truncatedName ]
 		[ subclass.name, truncatedName, subclass ].each {|key|
 			self.derivatives[ key ] = subclass
@@ -156,7 +184,6 @@ module Factory
 	###   obj = Listener::create( FooListener )
 	###   obj = Listener::create( 'Foo' )
 	def create( subType, *args, &block )
-		checkType( subType, ::String, ::Class )
 		subclass = getSubclass( subType )
 
 		return subclass.new( *args, &block )
@@ -171,7 +198,6 @@ module Factory
 	### #create, attempt to load the corresponding class if it is not
 	### already loaded and return the class object.
 	def getSubclass( className )
-		checkType( className, ::Class, ::String )
 		return self if ( self.name == className || className == '' )
 		return className if className.is_a?( Class ) && className >= self
 
@@ -180,13 +206,13 @@ module Factory
 			self.loadDerivative( className )
 
 			unless self.derivatives.has_key?( className.downcase )
-				raise Arrow::FactoryError,
+				raise FactoryError,
 					"loadDerivative(%s) didn't add a '%s' key to the "\
 				"registry for %s" %
 					[ className, className.downcase, self.name ]
 			end
 			unless self.derivatives[className].is_a?( Class )
-				raise Arrow::FactoryError,
+				raise FactoryError,
 					"loadDerivative(%s) added something other than a class "\
 				"to the registry for %s" % [ className, self.name ]
 			end
@@ -254,7 +280,6 @@ module Factory
 		if ( self.respond_to?(:derivativeDirs) )
 			subdirs = self.derivativeDirs
 			subdirs = [ subdirs ] unless subdirs.is_a?( Array )
-			checkEachType( subdirs, ::String )
 
 			# If not, just try requiring it from $LOAD_PATH
 		else
@@ -277,35 +302,35 @@ module Factory
 				lcAltModPath = lcModPath + self.factoryType.downcase
 
 				[modPath, lcModPath, altModPath, lcAltModPath].uniq.each {|path|
-					#Arrow::Logger[self].debug "Trying #{path}..."
+					#PluginFactory.log :debug, "Trying #{path}..."
 
 					# Try to require the module that defines the specified
 					# derivative
 					begin
 						require( path.untaint )
 					rescue LoadError => err
-						Arrow::Logger[self].debug \
+						PluginFactory.log :debug,
 						"No module at '%s', trying the next alternative: '%s'" %
 							[ path, err.message ]
 					rescue ScriptError,StandardError => err
 						fatals << err
-						Arrow::Logger[self].error \
+						PluginFactory.log :error,
 						"Found '#{path}', but encountered an error: %s\n\t%s" %
 							[ err.message, err.backtrace.join("\n\t") ]
 					else
-						#Arrow::Logger[self].debug \
+						#PluginFactory.log :debug,
 						#	"Found '#{path}'. Throwing :found"
 						throw :found
 					end
 				}
 			end
 
-			#Arrow::Logger[self].debug "fatals = %p" % [ fatals ]
+			#PluginFactory.log :debug, "fatals = %p" % [ fatals ]
 
 			# Re-raise is there was a file found, but it didn't load for
 			# some reason.
 			if ! fatals.empty?
-				#Arrow::Logger[self].debug "Re-raising first fatal error"
+				#PluginFactory.log :debug, "Re-raising first fatal error"
 				Kernel::raise( fatals.first )
 			end
 
