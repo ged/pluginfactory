@@ -6,3 +6,4 @@ lib/pluginfactory.rb
 test.rb
 tests/*
 tests/**/*
+utils.rb
