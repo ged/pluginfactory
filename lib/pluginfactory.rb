@@ -45,7 +45,7 @@
 # 
 # == Rcsid
 # 
-# $Id: pluginfactory.rb,v 1.2 2004/03/07 18:49:23 stillflame Exp $
+# $Id: pluginfactory.rb,v 1.3 2004/03/08 03:07:27 stillflame Exp $
 # 
 # == Authors
 # 
@@ -60,7 +60,7 @@
 
 
 ### An exception class for PluginFactory specific errors.
-class FactoryError < Exception
+class FactoryError < RuntimeError
 	def initialize( *args )
 		if ! args.empty?
 			msg = args.collect {|a| a.to_s}.join
