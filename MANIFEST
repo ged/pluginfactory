@@ -1,0 +1,8 @@
+COPYRIGHT
+ChangeLog
+README
+install.rb
+lib/pluginfactory.rb
+test.rb
+tests/*
+tests/**/*
