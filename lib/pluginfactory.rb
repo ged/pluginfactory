@@ -45,7 +45,7 @@
 # 
 # == Rcsid
 # 
-# $Id: factory.rb,v 1.1 2004/03/07 17:31:19 stillflame Exp $
+# $Id: pluginfactory.rb,v 1.1 2004/03/07 17:33:10 stillflame Exp $
 # 
 # == Authors
 # 
