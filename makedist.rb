@@ -10,11 +10,16 @@
 #	http://language.perl.com/misc/Artistic.html)
 #
 
+BEGIN {
+	basedir = File::dirname( File::expand_path(__FILE__) )
+	require "#{basedir}/utils.rb"
+}
+
 require 'optparse'
 require 'fileutils'
-require "./utils.rb"
+require 'rbconfig'
 
-include UtilityFunctions, FileUtils
+include UtilityFunctions, FileUtils, Config
 
 
 # SVN Revision
@@ -38,9 +43,9 @@ Distros = [
 	# Tar+gzipped
 	{
 		'type'		=> 'Tar+Gzipped',
-		'makeProc'	=> Proc.new {|distName|
+		'makeProc'	=> lambda {|distName|
 			gzArchiveName = "%s.tar.gz" % distName
-			if FileTest.exists?( gzArchiveName )
+			if File::exists?( gzArchiveName )
 				message "Removing old archive #{gzArchiveName}..."
 				File.delete( gzArchiveName )
 			end
@@ -51,28 +56,49 @@ Distros = [
 	# Tar+bzipped
 	{
 		'type'		=> 'Tar+Bzipped',
-		'makeProc'	=> Proc.new {|distName|
+		'makeProc'	=> lambda {|distName|
 			bzArchiveName = "%s.tar.bz2" % distName
-			if FileTest.exists?( bzArchiveName )
+			if File::exists?( bzArchiveName )
 				message "Removing old archive #{bzArchiveName}..."
 				File.delete( bzArchiveName )
 			end
-			system( $Programs['tar'], '-cjf', bzArchiveName, distName ) or abort( "tar failed: #{$?}" )
+			system( $Programs['tar'], '-cjf', bzArchiveName, distName ) or
+				abort( "tar failed: #{$?}" )
 		}
 	},
 
 	# Zipped
 	{
 		'type'		=> 'Zipped',
-		'makeProc'	=> Proc.new {|distName|
+		'makeProc'	=> lambda {|distName|
 			zipArchiveName = "%s.zip" % distName
-			if FileTest.exists?( zipArchiveName )
+			if File::exists?( zipArchiveName )
 				message "Removing old archive #{zipArchiveName}..."
 				File.delete( zipArchiveName )
 			end
-			system( $Programs['zip'], '-lrq9', zipArchiveName, distName ) or abort( "zip failed: #{$?}" )
+			system( $Programs['zip'], '-lrq9', zipArchiveName, distName ) or
+				abort( "zip failed: #{$?}" )
 		}
 	},
+
+	# Gem
+	{
+		'type'		=> 'RubyGem',
+		'makeProc'	=> lambda {|distName|
+			gemName = "%s.gem" % distName
+			if File::exists?( ".gemspec" )
+				if File::exists?( gemName )
+					message "Removing old gem #{gemName}..."
+					File::delete( gemName )
+				end
+
+				system( CONFIG['RUBY_INSTALL_NAME'], ".gemspec" ) or
+					abort( "Gem create failed: #{$?}" )
+			else
+				message "Skipping Gem: no .gemspec"
+			end
+		}
+	}
 ]
 
 
