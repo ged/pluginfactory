@@ -1,54 +1,78 @@
 #!/usr/bin/env ruby -w
 #
-# [<tt>PluginFactory</tt>]
-#    A mixin that adds Factory design pattern-like behaviour to the including
-#    class.  Autoloads files based on class name.
+# This module contains the PluginFactory mixin. Including PluginFactory in your
+# class turns it into a factory for its derivatives, capable of searching for
+# and loading them by name. This is useful when you have an abstract base class
+# which defines an interface and basic functionality for a part of a larger
+# system, and a collection of subclasses which implement the interface for
+# different underlying functionality.
+#
+# An example of where this might be useful is in a program which talks to a
+# database. To avoid coupling it to a specific database, you use a Driver class
+# which encapsulates your program's interaction with the database behind a
+# useful interface. Now you can create a concrete implementation of the Driver
+# class for each kind of database you wish to talk to. If you make the base
+# Driver class a PluginFactory, too, you can add new drivers simply by dropping
+# them in a directory and using the Driver's <tt>create</tt> method to
+# instantiate them:
+#
+# == Creation Argument Variants
+#
+# The +create+ class method added to your class by PluginFactory searches for your module using 
 #
 # == Synopsis
 # 
-#---##### in myclass.rb #####---
+#---##### in driver.rb #####---
 # 
 #	require "PluginFactory"
 #
-#	class MyClass
+#	class Driver
 #		include PluginFactory
-#		def derivativeDirs() ["some/dir"] end
+#		def self::derivativeDirs
+#		   ["drivers"]
+#		end
 #	end
 # 
 #---##########
 #
-#---##### in some/dir/mysubclass.rb #####
+#---##### in drivers/mysql.rb #####
 # 
-#	require 'myclass'
+#	require 'driver'
 #
-#	class MySubClass < MyClass; end
+#	class MysqlDriver < Driver
+#		...implementation...
+#	end
 # 
 #---##########
 #
-#---##### in /lib/ruby/othersub.rb #####
+#---##### in /usr/lib/ruby/1.8/PostgresDriver.rb #####
 # 
-#	require 'myclass'
+#	require 'driver'
 #
-#	class OtherSubClass < MyClass; end
+#	class PostgresDriver < Driver
+#		...implementation...
+#	end
 # 
 #---##########
 #
 #---##### elsewhere #####
 # 
-#	require 'myclass'
+#	require 'driver'
 #
-#	foo = MyClass.create("MySub")
-#	foo.class #=> MySubClass
-#	bar = MyClass.create("OtherSubClass")
+#	config[:driver_type] #=> "mysql"
+#	driver = Driver::create( config[:driver_type] )
+#	driver.class #=> MysqlDriver
+#	pgdriver = Driver::create( "PostGresDriver" )
 # 
 #---##########
 # 
 # == Rcsid
 # 
-# $Id: pluginfactory.rb,v 1.3 2004/03/08 03:07:27 stillflame Exp $
+# $Id: pluginfactory.rb,v 1.4 2004/03/08 08:05:38 deveiant Exp $
 # 
 # == Authors
 # 
+# * Martin Chase <stillflame@FaerieMUD.org>
 # * Michael Granger <ged@FaerieMUD.org>
 # 
 #:include: COPYRIGHT
@@ -76,38 +100,36 @@ end # class FactoryError
 ### subclasses may be instantiated by name.
 module PluginFactory
 
+	### A callback for logging the various debug and information this module
+	### has to log.  Should take two arguments, the log level, possibly as a
+	### symbol, and the log message itself.
+	@logger_callback = nil
 	class << self
-
-
-		### A callback for logging the various debug and information this module
-		### has to log.  Should take two arguments, the log level, possibly as a
-		### symbol, and the log message itself.
 		attr_accessor :logger_callback
+	end
+
+	### If the logger callback is set, use it to pass on a log entry.  First argument is 
+	def self::log(level, *msg)
+		@logger_callback.call(level, msg.join) if @logger_callback
+	end
 
 
-		### If the logger callback is set, use it to pass on a log entry.  First argument is 
-		def log(level, *msg)
-			@logger_callback.call(level, msg.join) if @logger_callback
+	### Inclusion callback -- extends the including class.
+	def self::included( klass )
+		klass.extend( self )
+	end
+
+
+	### Raise an exception if the object being extended is anything but a
+	### class.
+	def self::extend_object( obj )
+		unless obj.is_a?( Class )
+			raise TypeError, "Cannot extend a #{obj.class.name}", caller(1)
 		end
+		obj.instance_variable_set( :@derivatives, {} )
+		super
+	end
 
-
-		### Inclusion callback -- extends the including class.
-		def included( klass )
-			klass.extend( self )
-		end
-
-
-		### Raise an exception if the object being extended is anything but a
-		### class.
-		def extend_object( obj )
-			unless obj.is_a?( Class )
-				raise TypeError, "Cannot extend a #{obj.class.name}", caller(1)
-			end
-			obj.instance_variable_set( :@derivatives, {} )
-			super
-		end
-
-	end # class << self
 
 	#############################################################
 	###	M I X I N   M E T H O D S
@@ -148,17 +170,18 @@ module PluginFactory
 	### Inheritance callback -- Register subclasses in the derivatives hash
 	### so that ::create knows about them.
 	def inherited( subclass )
-		truncatedName =
-			# Handle class names like 'FooBar' for 'Bar' factories.
-			if subclass.name.match( /(?:.*::)?(\w+)(?:#{self.factoryType})/ )
-				Regexp.last_match[1].downcase
-			else
-				subclass.name.sub( /.*::/, '' ).downcase
-			end
+		keys = [ subclass.name, subclass.name.downcase, subclass ]
 
-		PluginFactory.log :info, "Registering %s derivative of %s as %s" %
-			[ subclass.name, self.name, truncatedName ]
-		[ subclass.name, truncatedName, subclass ].each {|key|
+		# Handle class names like 'FooBar' for 'Bar' factories.
+		if subclass.name.match( /(?:.*::)?(\w+)(?:#{self.factoryType})/i )
+			keys << Regexp.last_match[1].downcase
+		else
+			keys << subclass.name.sub( /.*::/, '' ).downcase
+		end
+
+		keys.uniq.each {|key|
+			#PluginFactory::log :info, "Registering %s derivative of %s as %p" %
+			#	[ subclass.name, self.name, key ]
 			self.derivatives[ key ] = subclass
 		}
 		super
@@ -202,19 +225,21 @@ module PluginFactory
 		return className if className.is_a?( Class ) && className >= self
 
 		unless self.derivatives.has_key?( className.downcase )
-
 			self.loadDerivative( className )
 
 			unless self.derivatives.has_key?( className.downcase )
 				raise FactoryError,
 					"loadDerivative(%s) didn't add a '%s' key to the "\
-				"registry for %s" %
+					"registry for %s" %
 					[ className, className.downcase, self.name ]
 			end
-			unless self.derivatives[className].is_a?( Class )
+
+			subclass = self.derivatives[ className.downcase ]
+			unless subclass.is_a?( Class )
 				raise FactoryError,
 					"loadDerivative(%s) added something other than a class "\
-				"to the registry for %s" % [ className, self.name ]
+					"to the registry for %s: %p" %
+					[ className, self.name, subclass ]
 			end
 		end
 
@@ -233,6 +258,8 @@ module PluginFactory
 	### prepended to it.
 	def loadDerivative( className )
 		className = className.to_s
+
+		#PluginFactory::log :debug, "Loading derivative #{className}"
 
 		# Get the unique part of the derived class name and try to
 		# load it from one of the derivative subdirs, if there are
@@ -281,7 +308,7 @@ module PluginFactory
 			subdirs = self.derivativeDirs
 			subdirs = [ subdirs ] unless subdirs.is_a?( Array )
 
-			# If not, just try requiring it from $LOAD_PATH
+		# If not, just try requiring it from $LOAD_PATH
 		else
 			subdirs = ['']
 		end
@@ -292,49 +319,67 @@ module PluginFactory
 		# module.
 		catch( :found ) {
 			subdirs.collect {|dir| dir.strip}.each do |subdir|
-				modPath = if subdir.empty? then modName
-						  else File::join( subdir, modName )
-						  end
-				lcModPath = if subdir.empty? then modName.downcase
-							else lcModPath = File::join( subdir, modName.downcase )
-							end
-				altModPath = modPath + self.factoryType.downcase
-				lcAltModPath = lcModPath + self.factoryType.downcase
+				self.makeRequirePath( modName, subdir ).each {|path|
+					#PluginFactory::log :debug, "Trying #{path}..."
 
-				[modPath, lcModPath, altModPath, lcAltModPath].uniq.each {|path|
-					#PluginFactory.log :debug, "Trying #{path}..."
-
-					# Try to require the module that defines the specified
-					# derivative
+					# Try to require the module, saving errors and jumping
+					# out of the catch block on success.
 					begin
 						require( path.untaint )
 					rescue LoadError => err
-						PluginFactory.log :debug,
-						"No module at '%s', trying the next alternative: '%s'" %
+						PluginFactory::log :debug,
+							"No module at '%s', trying the next alternative: '%s'" %
 							[ path, err.message ]
 					rescue ScriptError,StandardError => err
 						fatals << err
-						PluginFactory.log :error,
-						"Found '#{path}', but encountered an error: %s\n\t%s" %
+						PluginFactory::log :error,
+							"Found '#{path}', but encountered an error: %s\n\t%s" %
 							[ err.message, err.backtrace.join("\n\t") ]
 					else
-						#PluginFactory.log :debug,
+						#PluginFactory::log :debug, 
 						#	"Found '#{path}'. Throwing :found"
 						throw :found
 					end
 				}
 			end
 
-			#PluginFactory.log :debug, "fatals = %p" % [ fatals ]
+			#PluginFactory::log :debug, "fatals = %p" % [ fatals ]
 
 			# Re-raise is there was a file found, but it didn't load for
 			# some reason.
 			if ! fatals.empty?
-				#PluginFactory.log :debug, "Re-raising first fatal error"
+				#PluginFactory::log :debug, "Re-raising first fatal error"
 				Kernel::raise( fatals.first )
 			end
 
 			nil
 		}
 	end
+
+
+	### Make a list of permutations of the given +modname+ for the given
+	### +subdir+. Called on a +DataDriver+ class with the arguments 'Socket' and
+	### 'drivers', returns:
+	###   ["drivers/socketdatadriver", "drivers/socketDataDriver",
+	###    "drivers/SocketDataDriver", "drivers/socket", "drivers/Socket"]
+	def makeRequirePath( modname, subdir )
+		path = []
+		myname = self.factoryType
+
+		# Make permutations of the two parts
+		path << modname
+		path << modname.downcase
+		path << modname			 + myname
+		path << modname.downcase + myname
+		path << modname.downcase + myname.downcase
+
+		# If a non-empty subdir was given, prepend it to all the items in the
+		# path
+		unless subdir.nil? or subdir.empty?
+			path.collect! {|m| File::join(subdir, m)}
+		end
+
+		return path.uniq.reverse
+	end
+
 end # module Factory
