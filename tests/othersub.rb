@@ -2,4 +2,4 @@
 
 require 'mybase'
 
-class OtherSub < MyBase; end
+class OtherSubMyBase < MyBase; end
