@@ -68,7 +68,7 @@
 # 
 # == Rcsid
 # 
-# $Id: pluginfactory.rb,v 1.4 2004/03/08 08:05:38 deveiant Exp $
+# $Id$
 # 
 # == Authors
 # 
