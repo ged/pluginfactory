@@ -41,7 +41,7 @@ class Installer
     site_libdir = $:.find {|x| x =~ /site_ruby$/}
     if !site_libdir
       site_libdir = File.join(@libdir, "site_ruby")
-    elsif site_libdir !~ Regexp.quote(@version)
+    elsif site_libdir !~ Regexp::new( Regexp.quote(@version) )
       site_libdir = File.join(site_libdir, @version)
     end
     site_libdir
