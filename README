@@ -1,0 +1,39 @@
+= The PluginFactory mixin
+
+A mixin implementing a factory pattern, modified to load in subclasses on
+request.
+
+== Install
+
+$ sudo ./install.rb
+
+== Tests
+
+$ ./test.rb
+
+== Authors
+
+Michael Granger <ged@FaerieMUD.org>
+
+== Contributors
+
+Martin Chase <stillflame@FaerieMUD.org>
+
+== License/Legal
+
+All assets of the project are copyright (c) 2003-2004, The FaerieMUD
+Consortium. All rights reserved.
+
+You may use, modify, and/or redistribute this software under the terms of the
+Perl Artistic License, a copy of which should have been included in this
+distribution (See the file COPYRIGHT). If it was not, a copy of it may be
+obtained from http://language.perl.com/misc/Artistic.html or
+http://www.faeriemud.org/artistic.html).
+
+THIS PACKAGE IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF MERCHANTIBILITY AND
+FITNESS FOR A PARTICULAR PURPOSE.
+
+== Rcsid
+
+   $Id: README,v 1.2 2004/03/07 22:36:44 stillflame Exp $
