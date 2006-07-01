@@ -22,20 +22,18 @@
 #
 # == Synopsis
 # 
-#---##### in driver.rb #####---
+# in driver.rb:
 # 
 #	require "PluginFactory"
 #
 #	class Driver
 #		include PluginFactory
-#		def self::derivativeDirs
+#		def self::derivative_dirs
 #		   ["drivers"]
 #		end
 #	end
 # 
-#---##########
-#
-#---##### in drivers/mysql.rb #####
+# in drivers/mysql.rb:
 # 
 #	require 'driver'
 #
@@ -43,9 +41,7 @@
 #		...implementation...
 #	end
 # 
-#---##########
-#
-#---##### in /usr/lib/ruby/1.8/PostgresDriver.rb #####
+# in /usr/lib/ruby/1.8/PostgresDriver.rb:
 # 
 #	require 'driver'
 #
@@ -53,20 +49,16 @@
 #		...implementation...
 #	end
 # 
-#---##########
-#
-#---##### elsewhere #####
+# elsewhere
 # 
 #	require 'driver'
 #
 #	config[:driver_type] #=> "mysql"
-#	driver = Driver::create( config[:driver_type] )
+#	driver = Driver.create( config[:driver_type] )
 #	driver.class #=> MysqlDriver
-#	pgdriver = Driver::create( "PostGresDriver" )
+#	pgdriver = Driver.create( "PostGresDriver" )
 # 
-#---##########
-# 
-# == Rcsid
+# == Subversion ID
 # 
 # $Id$
 # 
@@ -147,7 +139,7 @@ module PluginFactory
 
 
 	### Returns the type name used when searching for a derivative.
-	def factoryType
+	def factory_type
 		base = nil
 		self.ancestors.each {|klass|
 			if klass.instance_variables.include?( "@derivatives" )
@@ -165,6 +157,7 @@ module PluginFactory
 			return base.name
 		end
 	end
+	alias_method :factoryType, :factory_type
 
 	
 	### Inheritance callback -- Register subclasses in the derivatives hash
@@ -173,7 +166,7 @@ module PluginFactory
 		keys = [ subclass.name, subclass.name.downcase, subclass ]
 
 		# Handle class names like 'FooBar' for 'Bar' factories.
-		if subclass.name.match( /(?:.*::)?(\w+)(?:#{self.factoryType})/i )
+		if subclass.name.match( /(?:.*::)?(\w+)(?:#{self.factory_type})/i )
 			keys << Regexp.last_match[1].downcase
 		else
 			keys << subclass.name.sub( /.*::/, '' ).downcase
@@ -189,9 +182,10 @@ module PluginFactory
 
 
 	### Returns an Array of registered derivatives
-	def derivativeClasses
+	def derivative_classes
 		self.derivatives.values.uniq
 	end
+	alias_method :derivativeClasses, :derivative_classes
 
 
 	### Given the <tt>className</tt> of the class to instantiate, and other
@@ -207,7 +201,7 @@ module PluginFactory
 	###   obj = Listener::create( FooListener )
 	###   obj = Listener::create( 'Foo' )
 	def create( subType, *args, &block )
-		subclass = getSubclass( subType )
+		subclass = get_subclass( subType )
 
 		return subclass.new( *args, &block )
 	rescue => err
@@ -220,16 +214,16 @@ module PluginFactory
 	### Given a <tt>className</tt> like that of the first argument to
 	### #create, attempt to load the corresponding class if it is not
 	### already loaded and return the class object.
-	def getSubclass( className )
+	def get_subclass( className )
 		return self if ( self.name == className || className == '' )
 		return className if className.is_a?( Class ) && className >= self
 
 		unless self.derivatives.has_key?( className.downcase )
-			self.loadDerivative( className )
+			self.load_derivative( className )
 
 			unless self.derivatives.has_key?( className.downcase )
 				raise FactoryError,
-					"loadDerivative(%s) didn't add a '%s' key to the "\
+					"load_derivative(%s) didn't add a '%s' key to the "\
 					"registry for %s" %
 					[ className, className.downcase, self.name ]
 			end
@@ -237,7 +231,7 @@ module PluginFactory
 			subclass = self.derivatives[ className.downcase ]
 			unless subclass.is_a?( Class )
 				raise FactoryError,
-					"loadDerivative(%s) added something other than a class "\
+					"load_derivative(%s) added something other than a class "\
 					"to the registry for %s: %p" %
 					[ className, self.name, subclass ]
 			end
@@ -245,7 +239,8 @@ module PluginFactory
 
 		return self.derivatives[ className.downcase ]
 	end
-
+	alias_method :getSubclass, :get_subclass
+	
 
 	### Calculates an appropriate filename for the derived class using the
 	### name of the base class and tries to load it via <tt>require</tt>. If
@@ -256,7 +251,7 @@ module PluginFactory
 	### <tt>class.derivativeDirs</tt> returns <tt>['foo','bar']</tt> the
 	### require line is tried with both <tt>'foo/'</tt> and <tt>'bar/'</tt>
 	### prepended to it.
-	def loadDerivative( className )
+	def load_derivative( className )
 		className = className.to_s
 
 		#PluginFactory::log :debug, "Loading derivative #{className}"
@@ -264,15 +259,15 @@ module PluginFactory
 		# Get the unique part of the derived class name and try to
 		# load it from one of the derivative subdirs, if there are
 		# any.
-		modName = self.getModuleName( className )
-		self.requireDerivative( modName )
+		mod_name = self.get_module_name( className )
+		self.require_derivative( mod_name )
 
 		# Check to see if the specified listener is now loaded. If it
 		# is not, raise an error to that effect.
 		unless self.derivatives[ className.downcase ]
 			raise FactoryError,
 				"Couldn't find a %s named '%s'. Loaded derivatives are: %p" % [
-				self.factoryType,
+				self.factory_type,
 				className.downcase,
 				self.derivatives.keys,
 			], caller(3)
@@ -280,27 +275,29 @@ module PluginFactory
 
 		return true
 	end
+	alias_method :loadDerivative, :load_derivative
 
 
 	### Build and return the unique part of the given <tt>className</tt>
 	### either by stripping leading namespaces if the name already has the
 	### name of the factory type in it (eg., 'My::FooService' for Service,
 	### or by appending the factory type if it doesn't.
-	def getModuleName( className )
-		if className =~ /\w+#{self.factoryType}/
-			modName = className.sub( /(?:.*::)?(\w+)(?:#{self.factoryType})/, "\\1" )
+	def get_module_name( className )
+		if className =~ /\w+#{self.factory_type}/
+			mod_name = className.sub( /(?:.*::)?(\w+)(?:#{self.factory_type})/, "\\1" )
 		else
-			modName = className
+			mod_name = className
 		end
 
-		return modName
+		return mod_name
 	end
+	alias_method :getModuleName, :get_module_name
 
 
 	### If the factory responds to the #derivativeDirs method, call
 	### it and use the returned array as a list of directories to
-	### search for the module with the specified <tt>modName</tt>.
-	def requireDerivative( modName )
+	### search for the module with the specified <tt>mod_name</tt>.
+	def require_derivative( mod_name )
 
 		# See if we have a list of special subdirs that derivatives
 		# live in
@@ -319,8 +316,8 @@ module PluginFactory
 		# module.
 		catch( :found ) {
 			subdirs.collect {|dir| dir.strip}.each do |subdir|
-				self.makeRequirePath( modName, subdir ).each {|path|
-					#PluginFactory::log :debug, "Trying #{path}..."
+				self.make_require_path( mod_name, subdir ).each {|path|
+					PluginFactory::log :debug, "Trying #{path}..."
 
 					# Try to require the module, saving errors and jumping
 					# out of the catch block on success.
@@ -355,6 +352,7 @@ module PluginFactory
 			nil
 		}
 	end
+	alias_method :requireDerivative, :require_derivative
 
 
 	### Make a list of permutations of the given +modname+ for the given
@@ -362,9 +360,9 @@ module PluginFactory
 	### 'drivers', returns:
 	###   ["drivers/socketdatadriver", "drivers/socketDataDriver",
 	###    "drivers/SocketDataDriver", "drivers/socket", "drivers/Socket"]
-	def makeRequirePath( modname, subdir )
+	def make_require_path( modname, subdir )
 		path = []
-		myname = self.factoryType
+		myname = self.factory_type
 
 		# Make permutations of the two parts
 		path << modname
@@ -379,7 +377,9 @@ module PluginFactory
 			path.collect! {|m| File::join(subdir, m)}
 		end
 
+		PluginFactory::log :debug, "Path is: #{path.uniq.reverse.inspect}..."
 		return path.uniq.reverse
 	end
+	alias_method :makeRequirePath, :make_require_path
 
 end # module Factory
