@@ -301,15 +301,18 @@ module PluginFactory
 
 		# See if we have a list of special subdirs that derivatives
 		# live in
-		if ( self.respond_to?(:derivativeDirs) )
+		if ( self.respond_to?(:derivative_dirs) )
+			subdirs = self.derivative_dirs
+
+		elsif ( self.respond_to?(:derivativeDirs) )
 			subdirs = self.derivativeDirs
-			subdirs = [ subdirs ] unless subdirs.is_a?( Array )
 
 		# If not, just try requiring it from $LOAD_PATH
 		else
 			subdirs = ['']
 		end
 
+		subdirs = [ subdirs ] unless subdirs.is_a?( Array )
 		fatals = []
 
 		# Iterate over the subdirs until we successfully require a
