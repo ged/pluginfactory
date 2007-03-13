@@ -16,6 +16,7 @@ BEGIN {
 }
 
 require 'optparse'
+require 'pathname'
 require 'fileutils'
 require 'rbconfig'
 
@@ -221,11 +222,16 @@ def main
 	end
 
 	# Make the distdir
+	distdir = Pathname.new( distName )
 	message "Making distribution directory #{distName}...\n"
-	Dir.mkdir( distName ) unless FileTest.directory?( distName )
+	distdir.mkpath
+
 	for file in filelist
-		File.makedirs( File.dirname(File.join(distName,file)) )
-		File.link( file, File.join(distName,file) )
+		path = Pathname.new( file )
+		distpath = distdir + file
+		distpath.dirname.mkpath
+		
+		FileUtils.copy( path, distpath )
 	end
 
 	# Make an archive file for each known kind
