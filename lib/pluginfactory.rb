@@ -313,6 +313,7 @@ module PluginFactory
 		end
 
 		subdirs = [ subdirs ] unless subdirs.is_a?( Array )
+		PluginFactory::log :debug, "Subdirs are: %p" % [subdirs]
 		fatals = []
 
 		# Iterate over the subdirs until we successfully require a
