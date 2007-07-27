@@ -13,7 +13,16 @@ BEGIN {
 
 require "pluginfactory"
 require "test/unit"
-require 'mybase'
+
+
+class Plugin
+	include PluginFactory
+	def self::derivative_dirs 
+		basedir = Pathname.new( __FILE__ ).dirname
+		return [ testdir, File::join(testdir, "dir") ]
+	end
+end
+
 
 class FactoryTests < Test::Unit::TestCase
 	

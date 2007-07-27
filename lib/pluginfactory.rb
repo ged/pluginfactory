@@ -76,21 +76,15 @@
 
 
 ### An exception class for PluginFactory specific errors.
-class FactoryError < RuntimeError
-	def initialize( *args )
-		if ! args.empty?
-			msg = args.collect {|a| a.to_s}.join
-			super( msg )
-		else
-			super( message )
-		end					
-	end
-end # class FactoryError
+class FactoryError < RuntimeError; end
 
 
 ### A mixin that adds PluginFactory class methods to a base class, so that
 ### subclasses may be instantiated by name.
 module PluginFactory
+
+	VERSION = '1.0.3'
+	
 
 	### A callback for logging the various debug and information this module
 	### has to log.  Should take two arguments, the log level, possibly as a
@@ -100,24 +94,24 @@ module PluginFactory
 		attr_accessor :logger_callback
 	end
 
-	### If the logger callback is set, use it to pass on a log entry.  First argument is 
-	def self::log(level, *msg)
-		@logger_callback.call(level, msg.join) if @logger_callback
+	### If the logger callback is set, use it to pass on a log entry.  First
+	### argument is a 'level' which is passed to the logging callback. Any
+	### remaining arguments will be joined and passed as a single second
+	### argument to the callback.
+	def self::log( level, *msg )
+		@logger_callback.call( level, msg.join ) if @logger_callback
 	end
 
 
-	### Inclusion callback -- extends the including class.
+	### Inclusion callback -- extends the including class. This is here so you can
+	### either 'include' or 'extend'.
 	def self::included( klass )
 		klass.extend( self )
 	end
 
 
-	### Raise an exception if the object being extended is anything but a
-	### class.
+	### Add the @derivatives instance variable to including classes.
 	def self::extend_object( obj )
-		unless obj.is_a?( Class )
-			raise TypeError, "Cannot extend a #{obj.class.name}", caller(1)
-		end
 		obj.instance_variable_set( :@derivatives, {} )
 		super
 	end
@@ -130,23 +124,23 @@ module PluginFactory
 	### Return the Hash of derivative classes, keyed by various versions of
 	### the class name.
 	def derivatives
-		ancestors.each {|klass|
+		ancestors.each do |klass|
 			if klass.instance_variables.include?( "@derivatives" )
-				break klass.instance_variable_get( :@derivatives )
+				return klass.instance_variable_get( :@derivatives )
 			end
-		}
+		end
 	end
 
 
 	### Returns the type name used when searching for a derivative.
 	def factory_type
 		base = nil
-		self.ancestors.each {|klass|
+		self.ancestors.each do |klass|
 			if klass.instance_variables.include?( "@derivatives" )
 				base = klass
 				break
 			end
-		}
+		end
 
 		raise FactoryError, "Couldn't find factory base for #{self.name}" if
 			base.nil?
@@ -172,11 +166,12 @@ module PluginFactory
 			keys << subclass.name.sub( /.*::/, '' ).downcase
 		end
 
-		keys.uniq.each {|key|
-			#PluginFactory::log :info, "Registering %s derivative of %s as %p" %
-			#	[ subclass.name, self.name, key ]
+		keys.uniq.each do |key|
+			PluginFactory.log :info, "Registering %s derivative of %s as %p" %
+				[ subclass.name, self.name, key ]
 			self.derivatives[ key ] = subclass
-		}
+		end
+
 		super
 	end
 
@@ -188,56 +183,57 @@ module PluginFactory
 	alias_method :derivativeClasses, :derivative_classes
 
 
-	### Given the <tt>className</tt> of the class to instantiate, and other
+	### Given the <tt>class_name</tt> of the class to instantiate, and other
 	### arguments bound for the constructor of the new object, this method
 	### loads the derivative class if it is not loaded already (raising a
 	### LoadError if an appropriately-named file cannot be found), and
-	### instantiates it with the given <tt>args</tt>. The <tt>className</tt>
+	### instantiates it with the given <tt>args</tt>. The <tt>class_name</tt>
 	### may be the the fully qualified name of the class, the class object
 	### itself, or the unique part of the class name. The following examples
 	### would all try to load and instantiate a class called "FooListener"
 	### if Listener included Factory
-	###   obj = Listener::create( 'FooListener' )
-	###   obj = Listener::create( FooListener )
-	###   obj = Listener::create( 'Foo' )
-	def create( subType, *args, &block )
-		subclass = get_subclass( subType )
+	###   obj = Listener.create( 'FooListener' )
+	###   obj = Listener.create( FooListener )
+	###   obj = Listener.create( 'Foo' )
+	def create( class_name, *args, &block )
+		subclass = get_subclass( class_name )
 
-		return subclass.new( *args, &block )
-	rescue => err
-		nicetrace = err.backtrace.reject {|frame| /#{__FILE__}/ =~ frame}
-		msg = "When creating '#{subType}': " + err.message
-		Kernel::raise( err.class, msg, nicetrace )
+		begin
+			return subclass.new( *args, &block )
+		rescue => err
+			nicetrace = err.backtrace.reject {|frame| /#{__FILE__}/ =~ frame}
+			msg = "When creating '#{class_name}': " + err.message
+			Kernel.raise( err, msg, nicetrace )
+		end
 	end
 
 
-	### Given a <tt>className</tt> like that of the first argument to
+	### Given a <tt>class_name</tt> like that of the first argument to
 	### #create, attempt to load the corresponding class if it is not
 	### already loaded and return the class object.
-	def get_subclass( className )
-		return self if ( self.name == className || className == '' )
-		return className if className.is_a?( Class ) && className >= self
+	def get_subclass( class_name )
+		return self if ( self.name == class_name || class_name == '' )
+		if class_name.is_a?( Class )
+			return class_name if class_name <= self
+			raise ArgumentError, "%s is not a descendent of %s" % [class_name, self]
+		end
 
-		unless self.derivatives.has_key?( className.downcase )
-			self.load_derivative( className )
+		class_name = class_name.to_s
 
-			unless self.derivatives.has_key?( className.downcase )
-				raise FactoryError,
-					"load_derivative(%s) didn't add a '%s' key to the "\
-					"registry for %s" %
-					[ className, className.downcase, self.name ]
-			end
+		# If the derivatives hash doesn't already contain the class, try to load it
+		unless self.derivatives.has_key?( class_name.downcase )
+			self.load_derivative( class_name )
 
-			subclass = self.derivatives[ className.downcase ]
+			subclass = self.derivatives[ class_name.downcase ]
 			unless subclass.is_a?( Class )
 				raise FactoryError,
 					"load_derivative(%s) added something other than a class "\
 					"to the registry for %s: %p" %
-					[ className, self.name, subclass ]
+					[ class_name, self.name, subclass ]
 			end
 		end
 
-		return self.derivatives[ className.downcase ]
+		return self.derivatives[ class_name.downcase ]
 	end
 	alias_method :getSubclass, :get_subclass
 	
@@ -251,42 +247,40 @@ module PluginFactory
 	### <tt>class.derivativeDirs</tt> returns <tt>['foo','bar']</tt> the
 	### require line is tried with both <tt>'foo/'</tt> and <tt>'bar/'</tt>
 	### prepended to it.
-	def load_derivative( className )
-		className = className.to_s
-
-		#PluginFactory::log :debug, "Loading derivative #{className}"
+	def load_derivative( class_name )
+		PluginFactory.log :debug, "Loading derivative #{class_name}"
 
 		# Get the unique part of the derived class name and try to
 		# load it from one of the derivative subdirs, if there are
 		# any.
-		mod_name = self.get_module_name( className )
-		self.require_derivative( mod_name )
+		mod_name = self.get_module_name( class_name )
+		paths_tried = self.require_derivative( mod_name )
 
 		# Check to see if the specified listener is now loaded. If it
 		# is not, raise an error to that effect.
-		unless self.derivatives[ className.downcase ]
+		unless self.derivatives[ class_name.downcase ]
 			raise FactoryError,
-				"Couldn't find a %s named '%s'. Loaded derivatives are: %p" % [
+				"Couldn't find a %s named '%s'. Tried: %s" % [
 				self.factory_type,
-				className.downcase,
-				self.derivatives.keys,
+				class_name.downcase,
+				paths_tried.join( ", " ),
 			], caller(3)
 		end
 
-		return true
+		return paths_tried
 	end
 	alias_method :loadDerivative, :load_derivative
 
 
-	### Build and return the unique part of the given <tt>className</tt>
+	### Build and return the unique part of the given <tt>class_name</tt>
 	### either by stripping leading namespaces if the name already has the
 	### name of the factory type in it (eg., 'My::FooService' for Service,
 	### or by appending the factory type if it doesn't.
-	def get_module_name( className )
-		if className =~ /\w+#{self.factory_type}/
-			mod_name = className.sub( /(?:.*::)?(\w+)(?:#{self.factory_type})/, "\\1" )
+	def get_module_name( class_name )
+		if class_name =~ /\w+#{self.factory_type}/
+			mod_name = class_name.sub( /(?:.*::)?(\w+)(?:#{self.factory_type})/, "\\1" )
 		else
-			mod_name = className
+			mod_name = class_name
 		end
 
 		return mod_name
@@ -294,7 +288,7 @@ module PluginFactory
 	alias_method :getModuleName, :get_module_name
 
 
-	### If the factory responds to the #derivativeDirs method, call
+	### If the factory responds to the #derivative_dirs method, call
 	### it and use the returned array as a list of directories to
 	### search for the module with the specified <tt>mod_name</tt>.
 	def require_derivative( mod_name )
@@ -313,48 +307,46 @@ module PluginFactory
 		end
 
 		subdirs = [ subdirs ] unless subdirs.is_a?( Array )
-		PluginFactory::log :debug, "Subdirs are: %p" % [subdirs]
+		PluginFactory.log :debug, "Subdirs are: %p" % [subdirs]
 		fatals = []
+		tries  = []
 
 		# Iterate over the subdirs until we successfully require a
 		# module.
-		catch( :found ) {
-			subdirs.collect {|dir| dir.strip}.each do |subdir|
-				self.make_require_path( mod_name, subdir ).each {|path|
-					PluginFactory::log :debug, "Trying #{path}..."
+		subdirs.collect {|dir| dir.strip}.each do |subdir|
+			self.make_require_path( mod_name, subdir ).each do |path|
+				PluginFactory.log :debug, "Trying #{path}..."
+				tries << path
 
-					# Try to require the module, saving errors and jumping
-					# out of the catch block on success.
-					begin
-						require( path.untaint )
-					rescue LoadError => err
-						PluginFactory::log :debug,
-							"No module at '%s', trying the next alternative: '%s'" %
-							[ path, err.message ]
-					rescue ScriptError,StandardError => err
-						fatals << err
-						PluginFactory::log :error,
-							"Found '#{path}', but encountered an error: %s\n\t%s" %
-							[ err.message, err.backtrace.join("\n\t") ]
-					else
-						#PluginFactory::log :debug, 
-						#	"Found '#{path}'. Throwing :found"
-						throw :found
-					end
-				}
+				# Try to require the module, saving errors and jumping
+				# out of the catch block on success.
+				begin
+					require( path.untaint )
+				rescue LoadError => err
+					PluginFactory.log :debug,
+						"No module at '%s', trying the next alternative: '%s'" %
+						[ path, err.message ]
+				rescue ScriptError,StandardError => err
+					fatals << err
+					PluginFactory.log :error,
+						"Found '#{path}', but encountered an error: %s\n\t%s" %
+						[ err.message, err.backtrace.join("\n\t") ]
+				else
+					return [path]
+				end
 			end
+		end
 
-			#PluginFactory::log :debug, "fatals = %p" % [ fatals ]
+		PluginFactory.log :debug, "fatals = %p" % [ fatals ]
 
-			# Re-raise is there was a file found, but it didn't load for
-			# some reason.
-			if ! fatals.empty?
-				#PluginFactory::log :debug, "Re-raising first fatal error"
-				Kernel::raise( fatals.first )
-			end
+		# Re-raise is there was a file found, but it didn't load for
+		# some reason.
+		if ! fatals.empty?
+			PluginFactory.log :debug, "Re-raising first fatal error"
+			Kernel.raise( fatals.first )
+		end
 
-			nil
-		}
+		return tries
 	end
 	alias_method :requireDerivative, :require_derivative
 
@@ -378,10 +370,10 @@ module PluginFactory
 		# If a non-empty subdir was given, prepend it to all the items in the
 		# path
 		unless subdir.nil? or subdir.empty?
-			path.collect! {|m| File::join(subdir, m)}
+			path.collect! {|m| File.join(subdir, m)}
 		end
 
-		PluginFactory::log :debug, "Path is: #{path.uniq.reverse.inspect}..."
+		PluginFactory.log :debug, "Path is: #{path.uniq.reverse.inspect}..."
 		return path.uniq.reverse
 	end
 	alias_method :makeRequirePath, :make_require_path
