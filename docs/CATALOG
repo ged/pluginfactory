@@ -1,9 +1,0 @@
-#
-# Title:  PluginFactory
-# Main:   README
-# Upload: ssh://oberon/www/devEiate.org/public/code/PluginFactory/
-# Webcvs: http://cvs.FaerieMUD.org/cgi/viewcvs.cgi/PluginFactory/
-#
-lib/pluginfactory.rb
-README
-ChangeLog

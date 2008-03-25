@@ -4,9 +4,9 @@
 #
 # Based on various other Rakefiles, especially one by Ben Bleything
 #
-# Copyright (c) 2007 The FaerieMUD Consortium
+# Copyright (c) 2007-2008 The FaerieMUD Consortium
 #
-# Mistakes:
+# Authors:
 #  * Michael Granger <ged@FaerieMUD.org>
 #
 
@@ -27,7 +27,6 @@ require 'rake'
 require 'rake/rdoctask'
 require 'rake/testtask'
 require 'rake/packagetask'
-require 'rake/gempackagetask'
 
 $dryrun = false
 
@@ -36,30 +35,80 @@ PKG_NAME      = 'PluginFactory'
 PKG_SUMMARY   = 'A mixin module for creating plugin classes'
 PKG_VERSION   = PluginFactory::VERSION
 PKG_FILE_NAME = "#{PKG_NAME.downcase}-#{PKG_VERSION}"
+GEM_FILE_NAME = "#{PKG_FILE_NAME}.gem"
 
 RELEASE_NAME  = "REL #{PKG_VERSION}"
 
-BASEDIR       = Pathname.new( __FILE__ ).dirname.expand_path
+BASEDIR       = Pathname.new( __FILE__ ).dirname.relative_path_from( Pathname.getwd )
 LIBDIR        = BASEDIR + 'lib'
 DOCSDIR       = BASEDIR + 'docs'
-SPECDIR       = BASEDIR + 'spec'
+PKGDIR        = BASEDIR + 'pkg'
 
 ARTIFACTS_DIR = Pathname.new( ENV['CC_BUILD_ARTIFACTS'] || '' )
 
 TEXT_FILES    = %w( Rakefile ChangeLog README LICENSE ).
 	collect {|filename| BASEDIR + filename }
-SPEC_FILES    = Pathname.glob( SPECDIR + '**/*_spec.rb' ).
-	delete_if {|item| item =~ /\.svn/ }
 LIB_FILES     = Pathname.glob( LIBDIR + '**/*.rb').
 	delete_if {|item| item =~ /\.svn/ }
 
-RELEASE_FILES = TEXT_FILES + LIB_FILES
+SPECDIR       = BASEDIR + 'spec'
+SPEC_FILES    = Pathname.glob( SPECDIR + '**/*_spec.rb' ).
+	delete_if {|item| item =~ /\.svn/ }
+SPEC_EXCLUDES = 'spec,/Library/Ruby,/var/lib,/usr/local/lib'
+
+
+RELEASE_FILES = TEXT_FILES + SPEC_FILES + LIB_FILES
 
 # Load task plugins
 RAKE_TASKDIR = BASEDIR + 'rake'
 Pathname.glob( RAKE_TASKDIR + '*.rb' ).each do |tasklib|
 	require tasklib
 end
+
+# Define some constants that depend on the 'svn' tasklib
+PKG_BUILD = get_svn_rev( BASEDIR ) || 0
+SNAPSHOT_PKG_NAME = "#{PKG_FILE_NAME}.#{PKG_BUILD}"
+SNAPSHOT_GEM_NAME = "#{SNAPSHOT_PKG_NAME}.gem"
+
+# Documentation constants
+RDOC_OPTIONS = [
+	'-w', '4',
+	'-SHN',
+	'-i', '.',
+	'-m', 'README',
+	'-W', 'http://deveiate.org/projects/PluginFactory/browser/trunk/'
+  ]
+
+# Release constants
+SMTP_HOST = 'mail.faeriemud.org'
+SMTP_PORT = 25
+
+GEMSPEC   = Gem::Specification.new do |gem|
+	gem.name              = PKG_NAME.downcase
+	gem.version           = PKG_VERSION
+
+	gem.summary           = PKG_SUMMARY
+	gem.description       = <<-EOD
+	PluginFactory is a mixin module that adds pluggable behavior to including
+	classes, allowing you to require and instantiate its subclasses by name via a 
+	factory method.
+	EOD
+
+	gem.authors           = "Michael Granger, Martin Chase"
+	gem.email             = 'ged@FaerieMUD.org'
+	gem.homepage          = "http://deveiate.org/projects/PluginFactory"
+	gem.rubyforge_project = 'deveiate'
+
+	gem.has_rdoc          = true
+	gem.rdoc_options      = RDOC_OPTIONS
+
+	gem.files             = RELEASE_FILES.
+		collect {|f| f.relative_path_from(BASEDIR).to_s }
+	gem.test_files        = SPEC_FILES.
+		collect {|f| f.relative_path_from(BASEDIR).to_s }
+end
+
+
 
 if Rake.application.options.trace
 	$trace = true
@@ -85,61 +134,86 @@ task :clean => [ :clobber_rdoc, :clobber_package ] do
 end
 
 
-### Task: rdoc
-Rake::RDocTask.new do |rdoc|
-	rdoc.rdoc_dir = 'docs/api'
-	rdoc.title    = "#{PKG_NAME} - #{PKG_SUMMARY}"
-	rdoc.options += ['-w', '4', '-SHN', '-i', 'docs']
+begin
+	gem 'darkfish-rdoc'
 
-	rdoc.rdoc_files.include 'README'
-	rdoc.rdoc_files.include LIB_FILES.collect {|f| f.to_s }
+	Rake::RDocTask.new do |rdoc|
+		rdoc.rdoc_dir = 'docs'
+		rdoc.title    = "#{PKG_NAME} - #{PKG_SUMMARY}"
+		rdoc.options += RDOC_OPTIONS + [ '-f', 'darkfish' ]
+
+		rdoc.rdoc_files.include 'README'
+		rdoc.rdoc_files.include LIB_FILES.collect {|f| f.to_s }
+	end
+rescue LoadError, Gem::Exception => err
+	if !Object.const_defined?( :Gem )
+		require 'rubygem'
+		retry
+	end
+	
+	task :no_darkfish do
+		fail "Could not generate RDoc: %s" % [ err.message ]
+	end
+	task :docs => :no_darkfish
 end
 
+
+### Task: package
+Rake::PackageTask.new( PKG_NAME, PKG_VERSION ) do |task|
+  	task.need_tar_gz   = true
+	task.need_tar_bz2  = true
+	task.need_zip      = true
+	task.package_dir   = PKGDIR.to_s
+  	task.package_files = RELEASE_FILES.
+		collect {|f| f.relative_path_from(BASEDIR).to_s }
+end
+task :package => [:gem]
 
 
 ### Task: gem
-gemspec = Gem::Specification.new do |gem|
-	pkg_build = get_svn_rev( BASEDIR ) || 0
-	
-	gem.name    	= PKG_NAME.downcase
-	gem.version 	= "%s.%s" % [ PKG_VERSION, pkg_build ]
+gempath = PKGDIR + GEM_FILE_NAME
 
-	gem.summary     = "#{PKG_NAME} - #{PKG_SUMMARY}"
-	gem.description = <<-EOD
-	PluginFactory is a mixin module that adds plugin-like behavior to the including
-	class, allowing you to require and instantiate its subclasses by name via a 
-	.create factory method.
-	EOD
-
-	gem.authors  	= "Martin Chase <stillflame@FaerieMUD.org> and " +
-					  "Michael Granger <ged@FaerieMUD.org>"
-	gem.homepage 	= "http://deveiate.org/projects/PluginFactory"
-
-	gem.has_rdoc 	= true
-
-	gem.files      	= RELEASE_FILES.
-		collect {|f| f.relative_path_from(BASEDIR).to_s }
-	gem.test_files 	= SPEC_FILES.
-		collect {|f| f.relative_path_from(BASEDIR).to_s }
+desc "Build a RubyGem package (#{GEM_FILE_NAME})"
+task :gem => gempath.to_s
+file gempath.to_s => [PKGDIR.to_s] + GEMSPEC.files do
+	when_writing( "Creating GEM" ) do
+		Gem::Builder.new( GEMSPEC ).build
+		verbose( true ) do
+			mv GEM_FILE_NAME, gempath
+		end
+	end
 end
-Rake::GemPackageTask.new( gemspec ) do |task|
-	task.gem_spec = gemspec
-	task.need_tar = false
-	task.need_tar_gz = true
-	task.need_tar_bz2 = true
-	task.need_zip = true
-end
-
 
 ### Task: install
-task :install => [:package] do
+desc "Install PluginFactory as a conventional library"
+task :install do
+	log "Installing PluginFactory as a conventional library"
+	sitelib = Pathname.new( CONFIG['sitelibdir'] )
+	Dir.chdir( LIBDIR ) do
+		LIB_FILES.each do |libfile|
+			relpath = libfile.relative_path_from( LIBDIR )
+			target = sitelib + relpath
+			FileUtils.mkpath target.dirname,
+				:mode => 0755, :verbose => true, :noop => $dryrun unless target.dirname.directory?
+			FileUtils.install relpath, target,
+				:mode => 0644, :verbose => true, :noop => $dryrun
+		end
+	end
+end
+
+
+
+### Task: install_gem
+desc "Install PluginFactory from a locally-built gem"
+task :install_gem => [:package] do
 	$stderr.puts 
 	installer = Gem::Installer.new( %{pkg/#{PKG_FILE_NAME}.gem} )
 	installer.install
 end
 
-### Task: uninstall
-task :uninstall => [:clean] do
+### Task: uninstall_gem
+desc "Install the PluginFactory gem"
+task :uninstall_gem => [:clean] do
 	uninstaller = Gem::Uninstaller.new( PKG_FILE_NAME )
 	uninstaller.uninstall
 end
@@ -224,7 +298,7 @@ end
 
 
 RCOV_OPTS = [
-	'--exclude', 'spec',
+	'--exclude', SPEC_EXCLUDES,
 	'--xrefs',
 	'--save',
 	'--callsites'

@@ -3,14 +3,12 @@
 #####################################################################
 
 require 'yaml'
-require 'English'
-require 'pluginfactory'
 
 # Strftime format for tags/releases
 TAG_TIMESTAMP_FORMAT = '%Y%m%d-%H%M%S'
 TAG_TIMESTAMP_PATTERN = /\d{4}\d{2}\d{2}-\d{6}/
 
-RELEASE_VERSION_PATTERN = /\d+\.\d+\.\d+/
+RELEASE_VERSION_PATTERN = /RELEASE_\d+_\d+_\d+/
 
 DEFAULT_EDITOR = 'vi'
 
@@ -29,6 +27,7 @@ end
 ### Get the subversion information for the current working directory as
 ### a hash.
 def get_svn_info( dir='.' )
+	trace "Doing: svn info #{dir}"
 	info = IO.read( '|-' ) or exec 'svn', 'info', dir
 	return YAML.load( info ) # 'svn info' outputs valid YAML! Yay!
 end
@@ -65,6 +64,13 @@ def get_svn_rev( dir='.' )
 end
 
 
+### Return the latest revision number of the specified +dir+ as an Integer.
+def get_last_changed_rev( dir='.' )
+	info = get_svn_info( dir )
+	return info['Last Changed Rev']
+end
+
+
 ### Return a list of the entries at the specified Subversion url. If
 ### no +url+ is specified, it will default to the list in the URL
 ### corresponding to the current working directory.
@@ -72,7 +78,7 @@ def svn_ls( url=nil )
 	url ||= get_svn_url()
 	list = IO.read( '|-' ) or exec 'svn', 'ls', url
 
-	trace 'svn ls of %s: %p' % [url, list] if $trace
+	trace 'svn ls of %s: %p' % [url, list]
 	
 	return [] if list.nil? || list.empty?
 	return list.split( $INPUT_RECORD_SEPARATOR )
@@ -93,26 +99,38 @@ end
 ### Return the URL of the latest timestamp in the tags directory.
 def get_latest_release_tag
 	rooturl    = get_svn_repo_root()
-	releaseurl = rooturl + '/releases'
+	releaseurl = rooturl + '/tags'
 	
-	tags = svn_ls( releaseurl ).grep( RELEASE_VERSION_PATTERN ).sort_by do |tag|
-		tag.split('.').collect {|i| Integer(i) }
-	end
+	tags = svn_ls( releaseurl ).
+		grep( RELEASE_VERSION_PATTERN ).
+		sort_by do |tag|
+			$stderr.puts "Sorting %p" % [ tag ]
+			tag.sub(%r{/$}, '' ).split('_')[1..-1].collect {|i| Integer(i) }
+		end
+	trace "Release tags are: %p" % [ tags ]
 	return nil if tags.empty?
 
 	return releaseurl + '/' + tags.last
 end
 
 
-### Extract a diff from the specified subversion working +dir+, rewrite its
-### file lines as Trac links, and return it.
+### Extract a diff from the specified subversion working +dir+ and return it.
 def make_svn_commit_log( dir='.' )
-	editor_prog = ENV['EDITOR'] || ENV['VISUAL'] || DEFAULT_EDITOR
-	
 	diff = IO.read( '|-' ) or exec 'svn', 'diff'
 	fail "No differences." if diff.empty?
 
 	return diff
+end
+
+
+### Extract the svn log from the specified subversion working +dir+, 
+### starting from rev +start+ and ending with rev +finish+, and return it.
+def make_svn_log( dir='.', start='PREV', finish='HEAD' )
+	trace "svn -r#{start}:#{finish} log #{dir}"
+	log = IO.read( '|-' ) or exec 'svn', "-r#{start}:#{finish}", 'log', dir
+	fail "No log between #{start} and #{finish}." if log.empty?
+
+	return log
 end
 
 
@@ -141,7 +159,7 @@ namespace :svn do
 	end
 
 
-	desc "Copy the most recent tag to releases/#{PluginFactory::VERSION}"
+	desc "Copy the most recent tag to tags/RELEASE_#{PluginFactory::VERSION.gsub(/\./, '_')}"
 	task :release do
 		last_tag    = get_latest_svn_timestamp_tag()
 		svninfo     = get_svn_info()
