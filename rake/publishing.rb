@@ -5,9 +5,77 @@
 RELEASE_NOTES_FILE    = 'release.notes'
 RELEASE_ANNOUNCE_FILE = 'release.ann'
 
+require 'net/smtp'
+require 'net/protocol'
+require 'openssl'
+
+### Add SSL to Net::SMTP
+class Net::SMTP
+	def ssl_start( helo='localhost.localdomain', user=nil, secret=nil, authtype=nil )
+		if block_given?
+			begin
+				do_ssl_start( helo, user, secret, authtype )
+				return yield( self )
+			ensure
+				do_finish
+			end
+		else
+			do_ssl_start( helo, user, secret, authtype )
+			return self
+		end
+	end
+	
+	
+	#######
+	private
+	#######
+
+	def do_ssl_start( helodomain, user, secret, authtype )
+		raise IOError, 'SMTP session already started' if @started
+		check_auth_args user, secret, authtype if user or secret
+
+		# Open the connection
+      	@debug_output << "opening connection to #{@address}...\n" if @debug_output
+		sock = timeout( @open_timeout ) { TCPsocket.new(@address, @port) }
+
+		# Wrap it in the SSL layer
+		ssl_context = OpenSSL::SSL::SSLContext.new
+		ssl_context.verify_mode = OpenSSL::SSL::VERIFY_NONE
+		ssl_sock = OpenSSL::SSL::SSLSocket.new( sock, ssl_context )
+		ssl_sock.sync_close = true
+		ssl_sock.connect
+
+		# Wrap it in the message-oriented IO layer
+		sslmsgio = Net::InternetMessageIO.new( ssl_sock )
+		sslmsgio.read_timeout = @read_timeout
+		sslmsgio.debug_output = @debug_output
+
+		@socket = sslmsgio
+
+		check_response(critical { recv_response() })
+		begin
+			if @esmtp
+				ehlo helodomain
+			else
+				helo helodomain
+			end
+		rescue ProtocolError
+			if @esmtp
+				@esmtp = false
+				@error_occured = false
+				retry
+			end
+			raise
+		end
+		authenticate user, secret, authtype if user
+		@started = true
+	ensure
+		@socket.close if not @started and @socket and not @socket.closed?
+	end
+end
+
 
 begin
-	gem 'tlsmail'
 	gem 'text-format'
 
 	require 'time'
@@ -89,7 +157,7 @@ begin
 		task :announce => [RELEASE_ANNOUNCE_FILE] do
 			email         = TMail::Mail.new
 			# email.to      = 'Ruby-Talk List <ruby-talk@ruby-lang.org>'
-			email.to      = 'ged@FaerieMUD.org'
+			email.to      = 'rubymage@gmail.com'
 			email.from    = GEMSPEC.email
 			email.subject = "[ANN] #{PKG_NAME} #{PKG_VERSION}"
 			email.body    = File.read( RELEASE_ANNOUNCE_FILE )
@@ -108,14 +176,17 @@ begin
 				username = prompt_with_default( "SMTP user", curuser )
 				password = prompt_for_password()
 			
+				trace "Creating SMTP connection to #{SMTP_HOST}:#{SMTP_PORT}"
 				smtp = Net::SMTP.new( SMTP_HOST, SMTP_PORT )
-				smtp.set_debug_output( $stderr )
-				smtp.enable_tls( OpenSSL::SSL::VERIFY_NONE )
+				smtp.set_debug_output( $stdout )
 				smtp.esmtp = true
 
-				smtp.start( username, password, :plain ) do |smtp|
+				trace "connecting..."
+				smtp.ssl_start( Socket.gethostname, username, password, :plain ) do |smtp|
+					trace "sending message..."
 					smtp.send_message( email.to_s, email.from, email.to )
 				end
+				trace "done."
 			end
 		end
 		
@@ -145,8 +216,8 @@ begin
 		end
 	end
 	
-rescue LoadError, Gem::Error => err
-	if !Object.const_set?( :Gem )
+rescue LoadError => err
+	if !Object.const_defined?( :Gem )
 		require 'rubygems'
 		retry
 	end
@@ -156,6 +227,9 @@ rescue LoadError, Gem::Error => err
 	end
 	
 	task :release => :no_release_tasks
+	task "release:announce" => :no_release_tasks
+	task "release:gem" => :no_release_tasks
+	task "release:notes" => :no_release_tasks
 end
 
 task :release => 'release:default'

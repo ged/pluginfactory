@@ -81,7 +81,7 @@ RDOC_OPTIONS = [
 
 # Release constants
 SMTP_HOST = 'mail.faeriemud.org'
-SMTP_PORT = 25
+SMTP_PORT = 465 # SMTP + SSL
 
 GEMSPEC   = Gem::Specification.new do |gem|
 	gem.name              = PKG_NAME.downcase
