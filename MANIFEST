@@ -2,8 +2,7 @@ COPYRIGHT
 ChangeLog
 README
 install.rb
+rake/*.rb
 lib/pluginfactory.rb
 test.rb
-tests/*
-tests/**/*
-utils.rb
+spec/**/*

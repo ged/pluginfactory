@@ -149,7 +149,16 @@ describe "A class extended with PluginFactory" do
 			and_return {|path| raise LoadError, "path" }
 		
 		lambda { Plugin.create('scintillating') }.
-			should raise_error( FactoryError, /couldn't find a \S+ named \S+.*tried\S+/i )
+			should raise_error( FactoryError, /couldn't find a \S+ named \S+.*tried \[/i )
+	end
+
+
+	it "will output a sensible description when a require succeeds, but it loads something unintended" do
+		# at least 6 -> 3 variants * 2 paths
+		Plugin.should_receive( :require ).and_return( true )
+		
+		lambda { Plugin.create('corruscating') }.
+			should raise_error( FactoryError, /Require of '\S+' succeeded, but didn't load a Plugin/i )
 	end
 	
 

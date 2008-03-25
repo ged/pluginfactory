@@ -1,5 +1,8 @@
 #!/usr/bin/env ruby -w
-#
+
+### An exception class for PluginFactory specific errors.
+class FactoryError < RuntimeError; end
+
 # This module contains the PluginFactory mixin. Including PluginFactory in your
 # class turns it into a factory for its derivatives, capable of searching for
 # and loading them by name. This is useful when you have an abstract base class
@@ -67,20 +70,12 @@
 # * Martin Chase <stillflame@FaerieMUD.org>
 # * Michael Granger <ged@FaerieMUD.org>
 # 
-#:include: COPYRIGHT
+# :include: LICENSE
 #
 #---
 #
-# Please see the file docs/COPYRIGHT for licensing details.
+# Please see the file LICENSE for licensing details.
 #
-
-
-### An exception class for PluginFactory specific errors.
-class FactoryError < RuntimeError; end
-
-
-### A mixin that adds PluginFactory class methods to a base class, so that
-### subclasses may be instantiated by name.
 module PluginFactory
 
 	VERSION = '1.0.3'
@@ -254,20 +249,19 @@ module PluginFactory
 		# load it from one of the derivative subdirs, if there are
 		# any.
 		mod_name = self.get_module_name( class_name )
-		paths_tried = self.require_derivative( mod_name )
+		result = self.require_derivative( mod_name )
 
 		# Check to see if the specified listener is now loaded. If it
 		# is not, raise an error to that effect.
 		unless self.derivatives[ class_name.downcase ]
-			raise FactoryError,
-				"Couldn't find a %s named '%s'. Tried: %s" % [
+			errmsg = "Require of '%s' succeeded, but didn't load a %s named '%s' for some reason." % [
+				result,
 				self.factory_type,
 				class_name.downcase,
-				paths_tried.join( ", " ),
-			], caller(3)
+			]
+			PluginFactory.log :error, errmsg
+			raise FactoryError, errmsg, caller(3)
 		end
-
-		return paths_tried
 	end
 	alias_method :loadDerivative, :load_derivative
 
@@ -326,13 +320,14 @@ module PluginFactory
 					PluginFactory.log :debug,
 						"No module at '%s', trying the next alternative: '%s'" %
 						[ path, err.message ]
-				rescue ScriptError,StandardError => err
+				rescue Exception => err
 					fatals << err
 					PluginFactory.log :error,
 						"Found '#{path}', but encountered an error: %s\n\t%s" %
 						[ err.message, err.backtrace.join("\n\t") ]
 				else
-					return [path]
+					PluginFactory.log :info, "Loaded '#{path}' without error."
+					return path
 				end
 			end
 		end
@@ -341,12 +336,18 @@ module PluginFactory
 
 		# Re-raise is there was a file found, but it didn't load for
 		# some reason.
-		if ! fatals.empty?
+		if fatals.empty?
+			errmsg = "Couldn't find a %s named '%s': tried %p" % [
+				self.factory_type,
+				mod_name,
+				tries
+			  ]
+			PluginFactory.log :error, errmsg
+			raise FactoryError, errmsg
+		else
 			PluginFactory.log :debug, "Re-raising first fatal error"
 			Kernel.raise( fatals.first )
 		end
-
-		return tries
 	end
 	alias_method :requireDerivative, :require_derivative
 
@@ -363,9 +364,12 @@ module PluginFactory
 		# Make permutations of the two parts
 		path << modname
 		path << modname.downcase
-		path << modname			 + myname
-		path << modname.downcase + myname
-		path << modname.downcase + myname.downcase
+		path << modname			       + myname
+		path << modname.downcase       + myname
+		path << modname.downcase       + myname.downcase
+		path << modname			 + '_' + myname
+		path << modname.downcase + '_' + myname
+		path << modname.downcase + '_' + myname.downcase
 
 		# If a non-empty subdir was given, prepend it to all the items in the
 		# path

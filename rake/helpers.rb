@@ -183,6 +183,14 @@ def prompt_with_default( prompt_string, default, failure_msg="Try again." )
 end
 
 
+### Prompt for a password, using the 'password' library if available, and erroring
+### if not.
+def prompt_for_password( prompt_string='Password: ' )
+	require 'password'
+	return Password.get( prompt_string )
+end
+
+
 ### Display a description of a potentially-dangerous task, and prompt
 ### for confirmation. If the user answers with anything that begins
 ### with 'y', yield to the block, else raise with an error.
@@ -215,3 +223,12 @@ def rspec_files
 end
 
 
+### Invoke the user's editor on the given +filename+ and return the exit code
+### from doing so.
+def edit( filename )
+	editor = ENV['EDITOR'] || ENV['VISUAL'] || DEFAULT_EDITOR
+	system editor, filename
+	unless $?.success?
+		fail "Editor exited uncleanly."
+	end
+end
