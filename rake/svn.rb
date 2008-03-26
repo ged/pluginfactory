@@ -161,31 +161,26 @@ namespace :svn do
 
 	desc "Copy the most recent tag to tags/RELEASE_#{PluginFactory::VERSION.gsub(/\./, '_')}"
 	task :release do
-		last_tag    = get_latest_svn_timestamp_tag()
 		svninfo     = get_svn_info()
-		release     = PluginFactory::VERSION
-		svnrel      = svninfo['Repository Root'] + '/releases'
+		svntrunk    = svninfo['Repository Root'] + '/trunk'
+		svnrel      = svninfo['Repository Root'] + '/tags'
+		release     = RELEASE_NAME
 		svnrelease  = svnrel + '/' + release
 
-		if last_tag.nil?
-			error "There are no tags in the repository"
-			fail
-		end
-
-		releases = svn_ls( svnrel )
+		releases = svn_ls( svnrel ).collect {|name| name.sub(%r{/$}, '') }
 		trace "Releases: %p" % [releases]
 		if releases.include?( release )
 			error "Version #{release} already has a branch (#{svnrelease}). Did you mean" +
 				"to increment the version in pluginfactory.rb?"
 			fail
 		else
-			trace "No #{svnrel} version currently exists"
+			trace "No #{release} version currently exists"
 		end
 		
-		desc = "Release tag\n  #{last_tag}\nto\n  #{svnrelease}"
+		desc = "Tagging trunk as #{svnrelease}..."
 		ask_for_confirmation( desc ) do
 			msg = prompt_with_default( "Commit log: ", "Branching for release" )
-			run 'svn', 'cp', '-m', msg, last_tag, svnrelease
+			run 'svn', 'cp', '-m', msg, svntrunk, svnrelease
 		end
 	end
 
