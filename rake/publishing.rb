@@ -98,9 +98,10 @@ begin
 
 
 	namespace :release do
-		task :default => [ :gem, :source, :announcement ]
+		task :default => [ 'svn:release', :publish, :announce, :project ]
+
+		desc "Generate the release notes"
 		task :notes => [RELEASE_NOTES_FILE]
-	
 		file RELEASE_NOTES_FILE do |task|
 			last_rel_tag = get_latest_release_tag()
 			trace "Last release tag is: %p" % [ last_rel_tag ]
@@ -115,6 +116,14 @@ begin
 			edit task.name
 		end
 		
+		
+		task :project => [ :rdoc ] do
+			when_writing( "Publishing docs to #{PROJECT_SCPURL}" ) do
+				run 'ssh', PROJECT_HOST, "rm -rf #{PROJECT_DOCDIR}"
+				run 'scp', '-qCr', 'docs', PROJECT_SCPURL
+			end
+		end
+
 		
 		file RELEASE_ANNOUNCE_FILE => [RELEASE_NOTES_FILE] do |task|
 			relnotes = File.read( RELEASE_NOTES_FILE )
@@ -191,8 +200,8 @@ begin
 		end
 		
 	
-		desc 'Package and upload to RubyForge'
-		task :gem => [:clobber, :package, :notes] do |task|
+		desc 'Publish the new release to RubyForge'
+		task :publish => [:clobber, :package, :notes] do |task|
 			project = GEMSPEC.rubyforge_project
 
 			rf = RubyForge.new
@@ -211,7 +220,8 @@ begin
 
 			log "Releasing #{PKG_FILE_NAME}"
 			when_writing do
-				trace "rf.add_release", project, PKG_NAME.downcase, PKG_VERSION, *files
+				log "Would have run: rf.add_release", project, PKG_NAME.downcase, PKG_VERSION,
+				 	*files
 			end
 		end
 	end
@@ -228,7 +238,7 @@ rescue LoadError => err
 	
 	task :release => :no_release_tasks
 	task "release:announce" => :no_release_tasks
-	task "release:gem" => :no_release_tasks
+	task "release:publish" => :no_release_tasks
 	task "release:notes" => :no_release_tasks
 end
 

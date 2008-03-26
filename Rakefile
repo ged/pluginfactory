@@ -37,7 +37,7 @@ PKG_VERSION   = PluginFactory::VERSION
 PKG_FILE_NAME = "#{PKG_NAME.downcase}-#{PKG_VERSION}"
 GEM_FILE_NAME = "#{PKG_FILE_NAME}.gem"
 
-RELEASE_NAME  = "REL #{PKG_VERSION}"
+RELEASE_NAME  = "RELEASE_#{PKG_VERSION.gsub(/\./, '_')}"
 
 BASEDIR       = Pathname.new( __FILE__ ).dirname.relative_path_from( Pathname.getwd )
 LIBDIR        = BASEDIR + 'lib'
@@ -83,6 +83,13 @@ RDOC_OPTIONS = [
 SMTP_HOST = 'mail.faeriemud.org'
 SMTP_PORT = 465 # SMTP + SSL
 
+# Project constants
+PROJECT_HOST = 'deveiate.org'
+PROJECT_PUBDIR = "/usr/local/www/public/code"
+PROJECT_DOCDIR = "#{PROJECT_PUBDIR}/#{PKG_NAME}"
+PROJECT_SCPURL = "#{PROJECT_HOST}:#{PROJECT_DOCDIR}"
+
+# RubyGem specification
 GEMSPEC   = Gem::Specification.new do |gem|
 	gem.name              = PKG_NAME.downcase
 	gem.version           = PKG_VERSION
