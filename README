@@ -1,9 +1,9 @@
 
 = PluginFactory
 
-PluginFactory is a mixin module turns an including class into a factory for its
-derivatives, capable of searching for and loading them by name. This is useful
-when you have an abstract base class which defines an interface and basic
+PluginFactory is a mixin module that turns an including class into a factory for
+its derivatives, capable of searching for and loading them by name. This is
+useful when you have an abstract base class which defines an interface and basic
 functionality for a part of a larger system, and a collection of subclasses
 which implement the interface for different underlying functionality.
 

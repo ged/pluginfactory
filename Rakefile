@@ -4,7 +4,7 @@
 #
 # Based on various other Rakefiles, especially one by Ben Bleything
 #
-# Copyright (c) 2007-2008 The FaerieMUD Consortium
+# Copyright (c) 2008 The FaerieMUD Consortium
 #
 # Authors:
 #  * Michael Granger <ged@FaerieMUD.org>
@@ -13,13 +13,14 @@
 BEGIN {
 	require 'pathname'
 	basedir = Pathname.new( __FILE__ ).dirname
+
 	libdir = basedir + "lib"
+	extdir = basedir + "ext"
 
 	$LOAD_PATH.unshift( libdir.to_s ) unless $LOAD_PATH.include?( libdir.to_s )
+	$LOAD_PATH.unshift( extdir.to_s ) unless $LOAD_PATH.include?( extdir.to_s )
 }
 
-
-require 'pluginfactory'
 
 require 'rbconfig'
 require 'rubygems'
@@ -27,43 +28,78 @@ require 'rake'
 require 'rake/rdoctask'
 require 'rake/testtask'
 require 'rake/packagetask'
+require 'rake/clean'
 
 $dryrun = false
 
 ### Config constants
-PKG_NAME      = 'PluginFactory'
-PKG_SUMMARY   = 'A mixin module for creating plugin classes'
-PKG_VERSION   = PluginFactory::VERSION
-PKG_FILE_NAME = "#{PKG_NAME.downcase}-#{PKG_VERSION}"
-GEM_FILE_NAME = "#{PKG_FILE_NAME}.gem"
-
-RELEASE_NAME  = "RELEASE_#{PKG_VERSION.gsub(/\./, '_')}"
-
 BASEDIR       = Pathname.new( __FILE__ ).dirname.relative_path_from( Pathname.getwd )
 LIBDIR        = BASEDIR + 'lib'
+EXTDIR        = BASEDIR + 'ext'
 DOCSDIR       = BASEDIR + 'docs'
 PKGDIR        = BASEDIR + 'pkg'
 
-ARTIFACTS_DIR = Pathname.new( ENV['CC_BUILD_ARTIFACTS'] || '' )
+PKG_NAME      = 'pluginfactory'
+PKG_SUMMARY   = 'A mixin for making plugin classes'
+VERSION_FILE  = LIBDIR + 'pluginfactory.rb'
+PKG_VERSION   = VERSION_FILE.read[ /VERSION = '(\d+\.\d+\.\d+)'/, 1 ]
+PKG_FILE_NAME = "#{PKG_NAME.downcase}-#{PKG_VERSION}"
+GEM_FILE_NAME = "#{PKG_FILE_NAME}.gem"
 
-TEXT_FILES    = %w( Rakefile ChangeLog README LICENSE ).
-	collect {|filename| BASEDIR + filename }
-LIB_FILES     = Pathname.glob( LIBDIR + '**/*.rb').
-	delete_if {|item| item =~ /\.svn/ }
+ARTIFACTS_DIR = Pathname.new( ENV['CC_BUILD_ARTIFACTS'] || 'artifacts' )
+
+TEXT_FILES    = %w( Rakefile ChangeLog README LICENSE ).collect {|filename| BASEDIR + filename }
+LIB_FILES     = Pathname.glob( LIBDIR + '**/*.rb' ).delete_if {|item| item =~ /\.svn/ }
+EXT_FILES     = Pathname.glob( EXTDIR + '**/*.{c,h,rb}' ).delete_if {|item| item =~ /\.svn/ }
 
 SPECDIR       = BASEDIR + 'spec'
-SPEC_FILES    = Pathname.glob( SPECDIR + '**/*_spec.rb' ).
-	delete_if {|item| item =~ /\.svn/ }
-SPEC_EXCLUDES = 'spec,/Library/Ruby,/var/lib,/usr/local/lib'
+SPEC_FILES    = Pathname.glob( SPECDIR + '**/*_spec.rb' ).delete_if {|item| item =~ /\.svn/ }
+
+TESTDIR       = BASEDIR + 'tests'
+TEST_FILES    = Pathname.glob( TESTDIR + '**/*.tests.rb' ).delete_if {|item| item =~ /\.svn/ }
+
+RAKE_TASKDIR  = BASEDIR + 'rake'
+RAKE_TASKLIBS = Pathname.glob( RAKE_TASKDIR + '*.rb' )
+
+LOCAL_RAKEFILE = BASEDIR + 'Rakefile.local'
+
+EXTRA_PKGFILES = []
+
+RELEASE_FILES = TEXT_FILES + 
+	SPEC_FILES + 
+	TEST_FILES + 
+	LIB_FILES + 
+	EXT_FILES + 
+	RAKE_TASKLIBS +
+	EXTRA_PKGFILES
+
+RELEASE_FILES << LOCAL_RAKEFILE if LOCAL_RAKEFILE.exist?
+
+COVERAGE_MINIMUM = ENV['COVERAGE_MINIMUM'] ? Float( ENV['COVERAGE_MINIMUM'] ) : 85.0
+RCOV_EXCLUDES = 'spec,tests,/Library/Ruby,/var/lib,/usr/local/lib'
+RCOV_OPTS = [
+	'--exclude', RCOV_EXCLUDES,
+	'--xrefs',
+	'--save',
+	'--callsites',
+	#'--aggregate', 'coverage.data' # <- doesn't work as of 0.8.1.2.0
+  ]
 
 
-RELEASE_FILES = TEXT_FILES + SPEC_FILES + LIB_FILES
+# Subversion constants -- directory names for releases and tags
+SVN_TRUNK_DIR    = 'trunk'
+SVN_RELEASES_DIR = 'releases'
+SVN_BRANCHES_DIR = 'branches'
+SVN_TAGS_DIR     = 'tags'
 
-# Load task plugins
-RAKE_TASKDIR = BASEDIR + 'rake'
-Pathname.glob( RAKE_TASKDIR + '*.rb' ).each do |tasklib|
-	require tasklib
-end
+SVN_DOTDIR       = BASEDIR + '.svn'
+SVN_ENTRIES      = SVN_DOTDIR + 'entries'
+
+
+### Load some task libraries that need to be loaded early
+require RAKE_TASKDIR + 'helpers.rb'
+require RAKE_TASKDIR + 'svn.rb'
+require RAKE_TASKDIR + 'verifytask.rb'
 
 # Define some constants that depend on the 'svn' tasklib
 PKG_BUILD = get_svn_rev( BASEDIR ) || 0
@@ -76,7 +112,7 @@ RDOC_OPTIONS = [
 	'-SHN',
 	'-i', '.',
 	'-m', 'README',
-	'-W', 'http://deveiate.org/projects/PluginFactory/browser/trunk/'
+	'-W', 'http://deveiate.org/projects/PluginFactory//browser/trunk/'
   ]
 
 # Release constants
@@ -89,6 +125,18 @@ PROJECT_PUBDIR = "/usr/local/www/public/code"
 PROJECT_DOCDIR = "#{PROJECT_PUBDIR}/#{PKG_NAME}"
 PROJECT_SCPURL = "#{PROJECT_HOST}:#{PROJECT_DOCDIR}"
 
+# Rubyforge stuff
+RUBYFORGE_GROUP = 'deveiate'
+RUBYFORGE_PROJECT = 'pluginfactory'
+
+# Gem dependencies: gemname => version
+DEPENDENCIES = {
+}
+
+# Non-gem requirements: packagename => version
+REQUIREMENTS = {
+}
+
 # RubyGem specification
 GEMSPEC   = Gem::Specification.new do |gem|
 	gem.name              = PKG_NAME.downcase
@@ -96,15 +144,17 @@ GEMSPEC   = Gem::Specification.new do |gem|
 
 	gem.summary           = PKG_SUMMARY
 	gem.description       = <<-EOD
-	PluginFactory is a mixin module that adds pluggable behavior to including
-	classes, allowing you to require and instantiate its subclasses by name via a 
-	factory method.
+	PluginFactory is a mixin module that turns an including class into a factory for
+	its derivatives, capable of searching for and loading them by name. This is
+	useful when you have an abstract base class which defines an interface and basic
+	functionality for a part of a larger system, and a collection of subclasses
+	which implement the interface for different underlying functionality.
 	EOD
 
-	gem.authors           = "Michael Granger, Martin Chase"
+	gem.authors           = 'Michael Granger'
 	gem.email             = 'ged@FaerieMUD.org'
-	gem.homepage          = "http://deveiate.org/projects/PluginFactory"
-	gem.rubyforge_project = 'deveiate'
+	gem.homepage          = 'http://deveiate.org/projects/PluginFactory/'
+	gem.rubyforge_project = RUBYFORGE_PROJECT
 
 	gem.has_rdoc          = true
 	gem.rdoc_options      = RDOC_OPTIONS
@@ -113,121 +163,71 @@ GEMSPEC   = Gem::Specification.new do |gem|
 		collect {|f| f.relative_path_from(BASEDIR).to_s }
 	gem.test_files        = SPEC_FILES.
 		collect {|f| f.relative_path_from(BASEDIR).to_s }
+		
+	DEPENDENCIES.each do |name, version|
+		version = '>= 0' if version.length.zero?
+		gem.add_dependency( name, version )
+	end
+	
+	REQUIREMENTS.each do |name, version|
+		gem.requirements << [ name, version ].compact.join(' ')
+	end
 end
 
+$trace = Rake.application.options.trace ? true : false
+$dryrun = Rake.application.options.dryrun ? true : false
 
 
-if Rake.application.options.trace
-	$trace = true
-	log "$trace is enabled"
+# Load any remaining task libraries
+RAKE_TASKLIBS.each do |tasklib|
+	next if tasklib =~ %r{/(helpers|svn|verifytask)\.rb$}
+	begin
+		require tasklib
+	rescue ScriptError => err
+		fail "Task library '%s' failed to load: %s: %s" %
+			[ tasklib, err.class.name, err.message ]
+		trace "Backtrace: \n  " + err.backtrace.join( "\n  " )
+	rescue => err
+		log "Task library '%s' failed to load: %s: %s. Some tasks may not be available." %
+			[ tasklib, err.class.name, err.message ]
+		trace "Backtrace: \n  " + err.backtrace.join( "\n  " )
+	end
 end
 
-if Rake.application.options.dryrun
-	$dryrun = true
-	log "$dryrun is enabled"
-end
+# Load any project-specific rules defined in 'Rakefile.local' if it exists
+import LOCAL_RAKEFILE if LOCAL_RAKEFILE.exist?
+
+
+#####################################################################
+###	T A S K S 	
+#####################################################################
 
 ### Default task
-task :default  => [:clean, :spec, :rdoc, :package]
+task :default  => [:clean, :local, :spec, :rdoc, :package]
+
+### Task the local Rakefile can append to -- no-op by default
+task :local
 
 
 ### Task: clean
-desc "Clean pkg, coverage, and rdoc; remove .bak files"
-task :clean => [ :clobber_rdoc, :clobber_package ] do
-	files = FileList['**/*.bak']
-	files.clear_exclude
-	File.rm( files ) unless files.empty?
-	FileUtils.rm_rf( 'artifacts' )
-end
+CLEAN.include 'coverage'
+CLOBBER.include 'artifacts', 'coverage.info', PKGDIR
 
+# Target to hinge on ChangeLog updates
+file SVN_ENTRIES
 
-begin
-	gem 'darkfish-rdoc'
+### Task: changelog
+file 'ChangeLog' => SVN_ENTRIES.to_s do |task|
+	log "Updating #{task.name}"
 
-	Rake::RDocTask.new do |rdoc|
-		rdoc.rdoc_dir = 'docs'
-		rdoc.title    = "#{PKG_NAME} - #{PKG_SUMMARY}"
-		rdoc.options += RDOC_OPTIONS + [ '-f', 'darkfish' ]
-
-		rdoc.rdoc_files.include 'README'
-		rdoc.rdoc_files.include LIB_FILES.collect {|f| f.to_s }
-	end
-rescue LoadError, Gem::Exception => err
-	if !Object.const_defined?( :Gem )
-		require 'rubygem'
-		retry
-	end
-	
-	task :no_darkfish do
-		fail "Could not generate RDoc: %s" % [ err.message ]
-	end
-	task :docs => :no_darkfish
-end
-
-
-### Task: package
-Rake::PackageTask.new( PKG_NAME, PKG_VERSION ) do |task|
-  	task.need_tar_gz   = true
-	task.need_tar_bz2  = true
-	task.need_zip      = true
-	task.package_dir   = PKGDIR.to_s
-  	task.package_files = RELEASE_FILES.
-		collect {|f| f.relative_path_from(BASEDIR).to_s }
-end
-task :package => [:gem]
-
-
-### Task: gem
-gempath = PKGDIR + GEM_FILE_NAME
-
-desc "Build a RubyGem package (#{GEM_FILE_NAME})"
-task :gem => gempath.to_s
-file gempath.to_s => [PKGDIR.to_s] + GEMSPEC.files do
-	when_writing( "Creating GEM" ) do
-		Gem::Builder.new( GEMSPEC ).build
-		verbose( true ) do
-			mv GEM_FILE_NAME, gempath
-		end
-	end
-end
-
-### Task: install
-desc "Install PluginFactory as a conventional library"
-task :install do
-	log "Installing PluginFactory as a conventional library"
-	sitelib = Pathname.new( CONFIG['sitelibdir'] )
-	Dir.chdir( LIBDIR ) do
-		LIB_FILES.each do |libfile|
-			relpath = libfile.relative_path_from( LIBDIR )
-			target = sitelib + relpath
-			FileUtils.mkpath target.dirname,
-				:mode => 0755, :verbose => true, :noop => $dryrun unless target.dirname.directory?
-			FileUtils.install relpath, target,
-				:mode => 0644, :verbose => true, :noop => $dryrun
-		end
+	changelog = make_svn_changelog()
+	File.open( task.name, 'w' ) do |fh|
+		fh.print( changelog )
 	end
 end
 
 
-
-### Task: install_gem
-desc "Install PluginFactory from a locally-built gem"
-task :install_gem => [:package] do
-	$stderr.puts 
-	installer = Gem::Installer.new( %{pkg/#{PKG_FILE_NAME}.gem} )
-	installer.install
-end
-
-### Task: uninstall_gem
-desc "Install the PluginFactory gem"
-task :uninstall_gem => [:clean] do
-	uninstaller = Gem::Uninstaller.new( PKG_FILE_NAME )
-	uninstaller.uninstall
-end
-
-
-
-### Cruisecontrol task
+### Task: cruise (Cruisecontrol task)
 desc "Cruisecontrol build"
 task :cruise => [:clean, :spec, :package] do |task|
 	raise "Artifacts dir not set." if ARTIFACTS_DIR.to_s.empty?
@@ -242,132 +242,11 @@ task :cruise => [:clean, :spec, :package] do |task|
 end
 
 
-### RSpec tasks
-begin
-	gem 'rspec', '>= 1.0.5'
-	require 'spec/rake/spectask'
-
-	### Task: spec
-	Spec::Rake::SpecTask.new( :spec ) do |task|
-		task.spec_files = SPEC_FILES
-		task.libs += [LIBDIR]
-		task.spec_opts = ['-c', '-f','s', '-b', '-D', 'u']
-	end
-	task :test => [:spec]
-
-
-	namespace :spec do
-
-		desc "Run rspec every time there's a change to one of the files"
-        task :autotest do
-			gem 'ZenTest', ">= 3.6.0"
-            require 'autotest/rspec'
-            autotester = Autotest::Rspec.new
-			autotester.exceptions = %r{\.svn|\.skel}
-            autotester.test_mappings = {
-                %r{^spec/.*\.rb$} => proc {|filename, _|
-                    filename
-                },
-                %r{^lib/[^/]*\.rb$} => proc {|_, m|
-                    ["spec/#{m[1]}_spec.rb"]
-                },
-            }
-            
-            autotester.run
-        end
-
-	
-		desc "Generate HTML output for a spec run"
-		Spec::Rake::SpecTask.new( :html ) do |task|
-			task.spec_files = SPEC_FILES
-			task.spec_opts = ['-f','h', '-D']
-		end
-
-		desc "Generate plain-text output for a CruiseControl.rb build"
-		Spec::Rake::SpecTask.new( :text ) do |task|
-			task.spec_files = SPEC_FILES
-			task.spec_opts = ['-f','p']
-		end
-	end
-rescue LoadError => err
-	task :no_rspec do
-		$stderr.puts "Testing tasks not defined: RSpec rake tasklib not available: %s" %
-			[ err.message ]
-	end
-	
-	task :spec => :no_rspec
-	namespace :spec do
-		task :autotest => :no_rspec
-		task :html => :no_rspec
-		task :text => :no_rspec
-	end
+desc "Update the build system to the latest version"
+task :update_build do
+	log "Updating the build system"
+	sh 'svn', 'up', RAKE_TASKDIR
+	log "Updating the Rakefile"
+	sh 'rake', '-f', RAKE_TASKDIR + 'Metarakefile'
 end
-
-
-RCOV_OPTS = [
-	'--exclude', SPEC_EXCLUDES,
-	'--xrefs',
-	'--save',
-	'--callsites'
-  ]
-
-### RCov (via RSpec) tasks
-begin
-	gem 'rcov', '>= 0.8.0.1'
-	gem 'rspec', '>= 1.0.5'
-
-	### Task: coverage (via RCov)
-	### Task: spec
-	desc "Build test coverage reports"
-	Spec::Rake::SpecTask.new( :coverage ) do |task|
-		task.spec_files = SPEC_FILES
-		task.libs += [LIBDIR]
-		task.spec_opts = ['-f', 'p', '-b']
-		task.rcov_opts = RCOV_OPTS
-		task.rcov = true
-	end
-
-	task :rcov => [:coverage] do; end
-	
-
-	### Other coverage tasks
-	namespace :coverage do
-		desc "Generate a detailed text coverage report"
-		Spec::Rake::SpecTask.new( :text ) do |task|
-			task.spec_files = SPEC_FILES
-			task.rcov_opts = RCOV_OPTS + ['--text-coverage']
-			task.rcov = true
-		end
-
-		desc "Show differences in coverage from last run"
-		Spec::Rake::SpecTask.new( :diff ) do |task|
-			task.spec_files = SPEC_FILES
-			task.rcov_opts = ['--text-coverage-diff']
-			task.rcov = true
-		end
-
-		### Task: verify coverage
-		desc "Build coverage statistics"
-		VerifyTask.new( :verify => :rcov ) do |task|
-			task.threshold = 85.0
-		end
-	end
-
-
-rescue LoadError => err
-	task :no_rcov do
-		$stderr.puts "Coverage tasks not defined: RSpec+RCov tasklib not available: %s" %
-			[ err.message ]
-	end
-
-	task :coverage => :no_rcov
-	task :clobber_coverage
-	task :rcov => :no_rcov
-	namespace :coverage do
-		task :text => :no_rcov
-		task :diff => :no_rcov
-	end
-	task :verify => :no_rcov
-end
-
 
