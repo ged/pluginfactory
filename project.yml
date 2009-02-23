@@ -2,6 +2,7 @@
 rubyforge_project: pluginfactory
 project_requirements: {}
 
+project_pubdir: /usr/local/www/public/code
 project_description: |-
   PluginFactory is a mixin module that turns an including class into a factory for
   its derivatives, capable of searching for and loading them by name. This is
@@ -10,11 +11,16 @@ project_description: |-
   which implement the interface for different underlying functionality.
 rubyforge_group: deveiate
 author_name: Michael Granger
+project_pubhost: deveiate
 project_homepage: http://deveiate.org/projects/PluginFactory/
 project_dependencies: {}
 
 project_summary: A mixin for making plugin classes
 project_name: PluginFactory
+version_file: pluginfactory.rb
 additional_pkgfiles: []
 
+dev_dependencies: {}
+
 author_email: ged@FaerieMUD.org
+post_install_message: ""

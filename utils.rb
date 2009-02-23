@@ -573,7 +573,7 @@ module UtilityFunctions
 				fh.each {|line|
 					newline = yield( line ) or next
 					tempfile.print( newline )
-					$deferr.puts "%p -> %p" % [ line, newline ] if
+					$stderr.puts "%p -> %p" % [ line, newline ] if
 						line != newline
 				}
 			}
