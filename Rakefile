@@ -4,7 +4,7 @@
 #
 # Based on various other Rakefiles, especially one by Ben Bleything
 #
-# Copyright (c) 2008 The FaerieMUD Consortium
+# Copyright (c) 2007-2009 The FaerieMUD Consortium
 #
 # Authors:
 #  * Michael Granger <ged@FaerieMUD.org>
@@ -21,39 +21,55 @@ BEGIN {
 	$LOAD_PATH.unshift( extdir.to_s ) unless $LOAD_PATH.include?( extdir.to_s )
 }
 
-
 require 'rbconfig'
-require 'rubygems'
 require 'rake'
 require 'rake/rdoctask'
 require 'rake/testtask'
 require 'rake/packagetask'
 require 'rake/clean'
+require 'rake/191_compat.rb'
 
 $dryrun = false
 
 ### Config constants
 BASEDIR       = Pathname.new( __FILE__ ).dirname.relative_path_from( Pathname.getwd )
+BINDIR        = BASEDIR + 'bin'
 LIBDIR        = BASEDIR + 'lib'
 EXTDIR        = BASEDIR + 'ext'
 DOCSDIR       = BASEDIR + 'docs'
 PKGDIR        = BASEDIR + 'pkg'
+DATADIR       = BASEDIR + 'data'
 
-PKG_NAME      = 'pluginfactory'
+PROJECT_NAME  = 'PluginFactory'
+PKG_NAME      = PROJECT_NAME.downcase
 PKG_SUMMARY   = 'A mixin for making plugin classes'
+
 VERSION_FILE  = LIBDIR + 'pluginfactory.rb'
-PKG_VERSION   = VERSION_FILE.read[ /VERSION = '(\d+\.\d+\.\d+)'/, 1 ]
+if VERSION_FILE.exist? && buildrev = ENV['CC_BUILD_LABEL']
+	PKG_VERSION = VERSION_FILE.read[ /VERSION\s*=\s*['"](\d+\.\d+\.\d+)['"]/, 1 ] + '.' + buildrev
+elsif VERSION_FILE.exist?
+	PKG_VERSION = VERSION_FILE.read[ /VERSION\s*=\s*['"](\d+\.\d+\.\d+)['"]/, 1 ]
+else
+	PKG_VERSION = '0.0.0'
+end
+
 PKG_FILE_NAME = "#{PKG_NAME.downcase}-#{PKG_VERSION}"
 GEM_FILE_NAME = "#{PKG_FILE_NAME}.gem"
+
+EXTCONF       = EXTDIR + 'extconf.rb'
 
 ARTIFACTS_DIR = Pathname.new( ENV['CC_BUILD_ARTIFACTS'] || 'artifacts' )
 
 TEXT_FILES    = %w( Rakefile ChangeLog README LICENSE ).collect {|filename| BASEDIR + filename }
+BIN_FILES     = Pathname.glob( BINDIR + '*' ).delete_if {|item| item =~ /\.svn/ }
 LIB_FILES     = Pathname.glob( LIBDIR + '**/*.rb' ).delete_if {|item| item =~ /\.svn/ }
 EXT_FILES     = Pathname.glob( EXTDIR + '**/*.{c,h,rb}' ).delete_if {|item| item =~ /\.svn/ }
+DATA_FILES    = Pathname.glob( DATADIR + '**/*' ).delete_if {|item| item =~ /\.svn/ }
 
 SPECDIR       = BASEDIR + 'spec'
-SPEC_FILES    = Pathname.glob( SPECDIR + '**/*_spec.rb' ).delete_if {|item| item =~ /\.svn/ }
+SPECLIBDIR    = SPECDIR + 'lib'
+SPEC_FILES    = Pathname.glob( SPECDIR + '**/*_spec.rb' ).delete_if {|item| item =~ /\.svn/ } +
+                Pathname.glob( SPECLIBDIR + '**/*.rb' ).delete_if {|item| item =~ /\.svn/ }
 
 TESTDIR       = BASEDIR + 'tests'
 TEST_FILES    = Pathname.glob( TESTDIR + '**/*.tests.rb' ).delete_if {|item| item =~ /\.svn/ }
@@ -68,8 +84,10 @@ EXTRA_PKGFILES = []
 RELEASE_FILES = TEXT_FILES + 
 	SPEC_FILES + 
 	TEST_FILES + 
+	BIN_FILES +
 	LIB_FILES + 
 	EXT_FILES + 
+	DATA_FILES + 
 	RAKE_TASKLIBS +
 	EXTRA_PKGFILES
 
@@ -107,12 +125,14 @@ SNAPSHOT_PKG_NAME = "#{PKG_FILE_NAME}.#{PKG_BUILD}"
 SNAPSHOT_GEM_NAME = "#{SNAPSHOT_PKG_NAME}.gem"
 
 # Documentation constants
+RDOCDIR = DOCSDIR + 'api'
 RDOC_OPTIONS = [
 	'-w', '4',
 	'-SHN',
 	'-i', '.',
 	'-m', 'README',
-	'-W', 'http://deveiate.org/projects/PluginFactory//browser/trunk/'
+	'-t', PKG_NAME,
+	'-W', 'http://deveiate.org/projects/PluginFactory/browser/trunk/'
   ]
 
 # Release constants
@@ -120,10 +140,11 @@ SMTP_HOST = 'mail.faeriemud.org'
 SMTP_PORT = 465 # SMTP + SSL
 
 # Project constants
-PROJECT_HOST = 'deveiate.org'
-PROJECT_PUBDIR = "/usr/local/www/public/code"
+PROJECT_HOST = 'deveiate'
+PROJECT_PUBDIR = '/usr/local/www/public/code'
 PROJECT_DOCDIR = "#{PROJECT_PUBDIR}/#{PKG_NAME}"
-PROJECT_SCPURL = "#{PROJECT_HOST}:#{PROJECT_DOCDIR}"
+PROJECT_SCPPUBURL = "#{PROJECT_HOST}:#{PROJECT_PUBDIR}"
+PROJECT_SCPDOCURL = "#{PROJECT_HOST}:#{PROJECT_DOCDIR}"
 
 # Rubyforge stuff
 RUBYFORGE_GROUP = 'deveiate'
@@ -131,6 +152,22 @@ RUBYFORGE_PROJECT = 'pluginfactory'
 
 # Gem dependencies: gemname => version
 DEPENDENCIES = {
+}
+
+# Developer Gem dependencies: gemname => version
+DEVELOPMENT_DEPENDENCIES = {
+	'amatch'      => '>= 0.2.3',
+	'rake'        => '>= 0.8.1',
+	'rcodetools'  => '>= 0.7.0.0',
+	'rcov'        => '>= 0',
+	'RedCloth'    => '>= 4.0.3',
+	'rspec'       => '>= 0',
+	'rubyforge'   => '>= 0',
+	'termios'     => '>= 0',
+	'text-format' => '>= 1.0.0',
+	'tmail'       => '>= 1.2.3.1',
+	'ultraviolet' => '>= 0.10.2',
+	'libxml-ruby' => '>= 0.8.3',
 }
 
 # Non-gem requirements: packagename => version
@@ -143,13 +180,13 @@ GEMSPEC   = Gem::Specification.new do |gem|
 	gem.version           = PKG_VERSION
 
 	gem.summary           = PKG_SUMMARY
-	gem.description       = <<-EOD
-	PluginFactory is a mixin module that turns an including class into a factory for
-	its derivatives, capable of searching for and loading them by name. This is
-	useful when you have an abstract base class which defines an interface and basic
-	functionality for a part of a larger system, and a collection of subclasses
-	which implement the interface for different underlying functionality.
-	EOD
+	gem.description       = [
+		"PluginFactory is a mixin module that turns an including class into a factory for",
+		"its derivatives, capable of searching for and loading them by name. This is",
+		"useful when you have an abstract base class which defines an interface and basic",
+		"functionality for a part of a larger system, and a collection of subclasses",
+		"which implement the interface for different underlying functionality.",
+  	  ].join( "\n" )
 
 	gem.authors           = 'Michael Granger'
 	gem.email             = 'ged@FaerieMUD.org'
@@ -158,6 +195,15 @@ GEMSPEC   = Gem::Specification.new do |gem|
 
 	gem.has_rdoc          = true
 	gem.rdoc_options      = RDOC_OPTIONS
+	gem.extra_rdoc_files  = %w[ChangeLog README LICENSE]
+
+	gem.bindir            = BINDIR.relative_path_from(BASEDIR).to_s
+	gem.executables       = BIN_FILES.select {|pn| pn.executable? }.
+		collect {|pn| pn.relative_path_from(BINDIR).to_s }
+
+	if EXTCONF.exist?
+		gem.extensions << EXTCONF.relative_path_from( BASEDIR ).to_s
+	end
 
 	gem.files             = RELEASE_FILES.
 		collect {|f| f.relative_path_from(BASEDIR).to_s }
@@ -166,13 +212,24 @@ GEMSPEC   = Gem::Specification.new do |gem|
 		
 	DEPENDENCIES.each do |name, version|
 		version = '>= 0' if version.length.zero?
-		gem.add_dependency( name, version )
+		gem.add_runtime_dependency( name, version )
+	end
+	
+	# Developmental dependencies don't work as of RubyGems 1.2.0
+	unless Gem::Version.new( Gem::RubyGemsVersion ) <= Gem::Version.new( "1.2.0" )
+		DEVELOPMENT_DEPENDENCIES.each do |name, version|
+			version = '>= 0' if version.length.zero?
+			gem.add_development_dependency( name, version )
+		end
 	end
 	
 	REQUIREMENTS.each do |name, version|
 		gem.requirements << [ name, version ].compact.join(' ')
 	end
 end
+
+# Manual-generation config
+MANUALDIR = DOCSDIR + 'manual'
 
 $trace = Rake.application.options.trace ? true : false
 $dryrun = Rake.application.options.dryrun ? true : false
@@ -229,13 +286,16 @@ end
 
 ### Task: cruise (Cruisecontrol task)
 desc "Cruisecontrol build"
-task :cruise => [:clean, :spec, :package] do |task|
+task :cruise => [:clean, 'spec:quiet', :package] do |task|
 	raise "Artifacts dir not set." if ARTIFACTS_DIR.to_s.empty?
-	artifact_dir = ARTIFACTS_DIR.cleanpath
+	artifact_dir = ARTIFACTS_DIR.cleanpath + ENV['CC_BUILD_LABEL']
 	artifact_dir.mkpath
 	
-	$stderr.puts "Copying coverage stats..."
-	FileUtils.cp_r( 'coverage', artifact_dir )
+	coverage = BASEDIR + 'coverage'
+	if coverage.exist? && coverage.directory?
+		$stderr.puts "Copying coverage stats..."
+		FileUtils.cp_r( 'coverage', artifact_dir )
+	end
 	
 	$stderr.puts "Copying packages..."
 	FileUtils.cp_r( FileList['pkg/*'].to_a, artifact_dir )

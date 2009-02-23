@@ -35,7 +35,7 @@ describe PluginFactory do
 
 	it "calls its logging callback with the level and joined message if set" do
 		level = nil; msg = nil
-		PluginFactory.logger_callback = lambda {|level, msg|}
+		PluginFactory.logger_callback = lambda {|l, m| level = l; msg = m }
 		
 		PluginFactory.log( :level, 'message1', 'message2' )
 		level.should == :level
