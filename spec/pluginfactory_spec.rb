@@ -9,18 +9,11 @@ BEGIN {
 	$LOAD_PATH.unshift( libdir ) unless $LOAD_PATH.include?( libdir )
 }
 
-begin
-	require 'spec/runner'
-	require 'pluginfactory'
-rescue LoadError
-	unless Object.const_defined?( :Gem )
-		require 'rubygems'
-		retry
-	end
-	raise
-end
+require 'spec'
+require 'logger'
+require 'pluginfactory'
 
-
+require 'spec/lib/helpers'
 
 class Plugin
 	extend PluginFactory
@@ -29,54 +22,55 @@ class Plugin
 	end
 end
 
-
-
 describe PluginFactory do
+	include PluginFactory::SpecHelpers
+
+	before( :each ) do
+		setup_logging( :fatal )
+	end
+	
 
 	it "calls its logging callback with the level and joined message if set" do
 		level = nil; msg = nil
 		PluginFactory.logger_callback = lambda {|l, m| level = l; msg = m }
+		PluginFactory.logger.level = Logger::DEBUG
 		
-		PluginFactory.log( :level, 'message1', 'message2' )
-		level.should == :level
-		msg.should == 'message1message2'
+		PluginFactory.log.debug( 'message' )
+		level.should == :debug
+		msg.should == 'message'
 	end
 	
 	it "doesn't error when its log method is called if no logging callback is set" do
 		PluginFactory.logger_callback = nil
-		lambda { PluginFactory.log(:level, "msg") }.should_not raise_error()
+		lambda { PluginFactory.log.debug("msg") }.should_not raise_error()
 	end
 
 end
 
+
+class SubPlugin < Plugin; end
+
 describe "A class extended with PluginFactory" do
-	
+	include PluginFactory::SpecHelpers
+
+	before( :all ) do
+		setup_logging( :fatal )
+	end
+
+	after( :all ) do
+		reset_logging()
+	end
+
 	before( :each ) do
-		# This is kind of cheating, but it makes testing possible without knowing 
-		# the order the examples are run in
-		Plugin.derivatives.clear
+		# Plugin.derivatives.clear
 	end
 	
 	
 	it "knows about all of its derivatives" do
-		Plugin.derivatives.should be_empty()
-		Plugin.derivatives.should be_an_instance_of( Hash )
-		
-		class SubPlugin < Plugin; end
-		
-		Plugin.derivatives.should have(4).members
 		Plugin.derivatives.keys.should include( 'sub' )
 		Plugin.derivatives.keys.should include( 'subplugin' )
 		Plugin.derivatives.keys.should include( 'SubPlugin' )
 		Plugin.derivatives.keys.should include( SubPlugin )
-	end
-	
-	it "can return an Array of all of its derivative classes" do
-		Plugin.derivative_classes.should be_empty()
-		
-		class OtherPlugin < Plugin; end
-		
-		Plugin.derivative_classes.should == [OtherPlugin]
 	end
 	
 	it "returns derivatives directly if they're already loaded" do
@@ -115,28 +109,14 @@ describe "A class extended with PluginFactory" do
 	it "will load new plugins from the require path if they're not loaded yet" do
 		loaded_class = nil
 
-		Plugin.should_receive( :require ).and_return {|*args|
-			loaded_class = Class.new( Plugin ) do
-				def self::name; "DazzlePlugin"; end
-			end
+		Plugin.should_receive( :require ).with( 'plugins/dazzle_plugin' ).and_return do |*args|
+			loaded_class = Class.new( Plugin )
+			# Simulate a named class, since we're not really requiring
+			Plugin.derivatives['dazzle'] = loaded_class 
 			true
-		}
+		end
 		
 		Plugin.create( 'dazzle' ).should be_an_instance_of( loaded_class )
-	end
-	
-
-	it "will #require derivatives that aren't yet loaded" do
-		loaded_class = nil
-
-		Plugin.should_receive( :require ).and_return {|*args|
-			loaded_class = Class.new( Plugin ) do
-				def self::name; "SnazzlePlugin"; end
-			end
-			true
-		}
-		
-		Plugin.create( 'snazzle' ).should be_an_instance_of( loaded_class )
 	end
 	
 
@@ -176,11 +156,9 @@ describe "A class extended with PluginFactory" do
 end
 
 
+class TestingPlugin < Plugin; end
+
 describe "A derivative of a class extended with PluginFactory" do
-	
-	before( :all ) do
-		class TestingPlugin < Plugin; end
-	end
 	
 	it "knows what type of factory loads it" do
 		TestingPlugin.factory_type.should == 'Plugin'
@@ -194,11 +172,9 @@ describe "A derivative of a class extended with PluginFactory" do
 end
 
 
+class BlackSheep < Plugin; end
+
 describe "A derivative of a class extended with PluginFactory that isn't named <Something>Plugin" do
-	
-	before( :all ) do
-		class BlackSheep < Plugin; end
-	end
 	
 	it "is still creatable via its full name" do
 		Plugin.create( 'blacksheep' ).should be_an_instance_of( BlackSheep )
@@ -207,13 +183,11 @@ describe "A derivative of a class extended with PluginFactory that isn't named <
 end
 
 
+module Test
+	class LoadablePlugin < Plugin; end
+end
+
 describe "A derivative of a class extended with PluginFactory in another namespace" do
-	
-	before( :all ) do
-		module Test
-			class LoadablePlugin < Plugin; end
-		end
-	end
 	
 	it "is still creatable via its derivative name" do
 		Plugin.create( 'loadable' ).should be_an_instance_of( Test::LoadablePlugin )

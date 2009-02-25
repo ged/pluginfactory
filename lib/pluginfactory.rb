@@ -1,5 +1,7 @@
 #!/usr/bin/env ruby -w
 
+require 'logger'
+
 ### An exception class for PluginFactory specific errors.
 class FactoryError < RuntimeError; end
 
@@ -81,20 +83,49 @@ module PluginFactory
 	VERSION = '1.0.3'
 	
 
-	### A callback for logging the various debug and information this module
-	### has to log.  Should take two arguments, the log level, possibly as a
-	### symbol, and the log message itself.
-	@logger_callback = nil
+	### Logging 
+	@default_logger = Logger.new( $stderr )
+	@default_logger.level = $DEBUG ? Logger::DEBUG : Logger::WARN
+
+	@logger = @default_logger
+
+
 	class << self
-		attr_accessor :logger_callback
+		# The logger that will be used when the logging subsystem is reset
+		attr_accessor :default_logger
+		
+		# The logger that's currently in effect
+		attr_accessor :logger
+		alias_method :log, :logger
+		alias_method :log=, :logger=
 	end
 
-	### If the logger callback is set, use it to pass on a log entry.  First
-	### argument is a 'level' which is passed to the logging callback. Any
-	### remaining arguments will be joined and passed as a single second
-	### argument to the callback.
-	def self::log( level, *msg )
-		@logger_callback.call( level, msg.join ) if @logger_callback
+
+	### Deprecated: use the Logger object at #log to manipulate logging instead of this
+	### method.
+	def self::logger_callback=( callback )
+		if callback.nil?
+			self.logger.formatter = nil
+		else
+			self.logger.formatter = lambda {|lvl, _, _, msg|
+				callback.call(lvl.downcase.to_sym, msg)
+				''
+			}
+		end
+	end
+	
+
+	### Reset the global logger object to the default
+	def self::reset_logger
+		self.logger = self.default_logger
+		self.logger.level = Logger::WARN
+	end
+	
+
+	### Returns +true+ if the global logger has not been set to something other than
+	### the default one.
+	def self::using_default_logger?
+		return self.logger == self.default_logger
 	end
 
 
@@ -120,7 +151,8 @@ module PluginFactory
 	### the class name.
 	def derivatives
 		ancestors.each do |klass|
-			if klass.instance_variables.include?( "@derivatives" )
+			if klass.instance_variables.include?( :@derivatives ) ||
+			   klass.instance_variables.include?( "@derivatives" )
 				return klass.instance_variable_get( :@derivatives )
 			end
 		end
@@ -131,7 +163,8 @@ module PluginFactory
 	def factory_type
 		base = nil
 		self.ancestors.each do |klass|
-			if klass.instance_variables.include?( "@derivatives" )
+			if klass.instance_variables.include?( :@derivatives ) ||
+				klass.instance_variables.include?( "@derivatives" ) 
 				base = klass
 				break
 			end
@@ -152,17 +185,26 @@ module PluginFactory
 	### Inheritance callback -- Register subclasses in the derivatives hash
 	### so that ::create knows about them.
 	def inherited( subclass )
-		keys = [ subclass.name, subclass.name.downcase, subclass ]
+		keys = [ subclass ]
 
-		# Handle class names like 'FooBar' for 'Bar' factories.
-		if subclass.name.match( /(?:.*::)?(\w+)(?:#{self.factory_type})/i )
-			keys << Regexp.last_match[1].downcase
+		# If it's not an anonymous class, make some keys out of variants of its name
+		if subclass.name
+			simple_name = subclass.name.sub( /#<Class:0x[[:xdigit:]]+>::/i, '' )
+			keys << simple_name << simple_name.downcase
+
+			# Handle class names like 'FooBar' for 'Bar' factories.
+			PluginFactory.log.debug "Inherited %p for %p-type plugins" % [ subclass, self.factory_type ]
+			if subclass.name.match( /(?:.*::)?(\w+)(?:#{self.factory_type})/i )
+				keys << Regexp.last_match[1].downcase
+			else
+				keys << subclass.name.sub( /.*::/, '' ).downcase
+			end
 		else
-			keys << subclass.name.sub( /.*::/, '' ).downcase
+			PluginFactory.log.debug "  no name-based variants for anonymous subclass %p" % [ subclass ]
 		end
 
-		keys.uniq.each do |key|
-			PluginFactory.log :info, "Registering %s derivative of %s as %p" %
+		keys.compact.uniq.each do |key|
+			PluginFactory.log.info "Registering %s derivative of %s as %p" %
 				[ subclass.name, self.name, key ]
 			self.derivatives[ key ] = subclass
 		end
@@ -243,7 +285,7 @@ module PluginFactory
 	### require line is tried with both <tt>'foo/'</tt> and <tt>'bar/'</tt>
 	### prepended to it.
 	def load_derivative( class_name )
-		PluginFactory.log :debug, "Loading derivative #{class_name}"
+		PluginFactory.log.debug "Loading derivative #{class_name}"
 
 		# Get the unique part of the derived class name and try to
 		# load it from one of the derivative subdirs, if there are
@@ -259,7 +301,7 @@ module PluginFactory
 				self.factory_type,
 				class_name.downcase,
 			]
-			PluginFactory.log :error, errmsg
+			PluginFactory.log.error( errmsg )
 			raise FactoryError, errmsg, caller(3)
 		end
 	end
@@ -301,7 +343,7 @@ module PluginFactory
 		end
 
 		subdirs = [ subdirs ] unless subdirs.is_a?( Array )
-		PluginFactory.log :debug, "Subdirs are: %p" % [subdirs]
+		PluginFactory.log.debug "Subdirs are: %p" % [subdirs]
 		fatals = []
 		tries  = []
 
@@ -309,7 +351,7 @@ module PluginFactory
 		# module.
 		subdirs.collect {|dir| dir.strip}.each do |subdir|
 			self.make_require_path( mod_name, subdir ).each do |path|
-				PluginFactory.log :debug, "Trying #{path}..."
+				PluginFactory.log.debug "Trying #{path}..."
 				tries << path
 
 				# Try to require the module, saving errors and jumping
@@ -317,22 +359,20 @@ module PluginFactory
 				begin
 					require( path.untaint )
 				rescue LoadError => err
-					PluginFactory.log :debug,
-						"No module at '%s', trying the next alternative: '%s'" %
+					PluginFactory.log.debug "No module at '%s', trying the next alternative: '%s'" %
 						[ path, err.message ]
 				rescue Exception => err
 					fatals << err
-					PluginFactory.log :error,
-						"Found '#{path}', but encountered an error: %s\n\t%s" %
+					PluginFactory.log.error "Found '#{path}', but encountered an error: %s\n\t%s" %
 						[ err.message, err.backtrace.join("\n\t") ]
 				else
-					PluginFactory.log :info, "Loaded '#{path}' without error."
+					PluginFactory.log.info "Loaded '#{path}' without error."
 					return path
 				end
 			end
 		end
 
-		PluginFactory.log :debug, "fatals = %p" % [ fatals ]
+		PluginFactory.log.debug "fatals = %p" % [ fatals ]
 
 		# Re-raise is there was a file found, but it didn't load for
 		# some reason.
@@ -342,10 +382,10 @@ module PluginFactory
 				mod_name,
 				tries
 			  ]
-			PluginFactory.log :error, errmsg
+			PluginFactory.log.error( errmsg )
 			raise FactoryError, errmsg
 		else
-			PluginFactory.log :debug, "Re-raising first fatal error"
+			PluginFactory.log.debug "Re-raising first fatal error"
 			Kernel.raise( fatals.first )
 		end
 	end
@@ -377,7 +417,7 @@ module PluginFactory
 			path.collect! {|m| File.join(subdir, m)}
 		end
 
-		PluginFactory.log :debug, "Path is: #{path.uniq.reverse.inspect}..."
+		PluginFactory.log.debug "Path is: #{path.uniq.reverse.inspect}..."
 		return path.uniq.reverse
 	end
 	alias_method :makeRequirePath, :make_require_path
