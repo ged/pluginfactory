@@ -81,7 +81,7 @@ class FactoryError < RuntimeError; end
 module PluginFactory
 
 	VERSION = '1.0.4'
-	
+
 
 	### Logging 
 	@default_logger = Logger.new( $stderr )
@@ -93,7 +93,7 @@ module PluginFactory
 	class << self
 		# The logger that will be used when the logging subsystem is reset
 		attr_accessor :default_logger
-		
+
 		# The logger that's currently in effect
 		attr_accessor :logger
 		alias_method :log, :logger
@@ -113,14 +113,14 @@ module PluginFactory
 			}
 		end
 	end
-	
+
 
 	### Reset the global logger object to the default
 	def self::reset_logger
 		self.logger = self.default_logger
 		self.logger.level = Logger::WARN
 	end
-	
+
 
 	### Returns +true+ if the global logger has not been set to something other than
 	### the default one.
@@ -181,7 +181,7 @@ module PluginFactory
 	end
 	alias_method :factoryType, :factory_type
 
-	
+
 	### Inheritance callback -- Register subclasses in the derivatives hash
 	### so that ::create knows about them.
 	def inherited( subclass )
@@ -273,7 +273,7 @@ module PluginFactory
 		return self.derivatives[ class_name.downcase ]
 	end
 	alias_method :getSubclass, :get_subclass
-	
+
 
 	### Calculates an appropriate filename for the derived class using the
 	### name of the base class and tries to load it via <tt>require</tt>. If

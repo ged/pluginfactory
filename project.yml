@@ -1,4 +1,6 @@
 --- 
+excluded_pkgfiles: []
+
 rubyforge_project: pluginfactory
 project_requirements: {}
 
@@ -10,7 +12,6 @@ project_description: |-
   functionality for a part of a larger system, and a collection of subclasses
   which implement the interface for different underlying functionality.
 rubyforge_group: deveiate
-author_name: Michael Granger
 project_pubhost: deveiate
 project_homepage: http://deveiate.org/projects/PluginFactory/
 project_dependencies: {}
@@ -22,5 +23,7 @@ additional_pkgfiles: []
 
 dev_dependencies: {}
 
-author_email: ged@FaerieMUD.org
+authors: 
+  Michael Granger: ged@FaerieMUD.org
+  Martin Chase: stillflame@FaerieMUD.org
 post_install_message: ""
