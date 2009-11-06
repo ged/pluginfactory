@@ -187,10 +187,6 @@ this might generate a log that looks like:
   E, [...] ERROR -- : Couldn't find a DataDriver named 'ringbuffer': 
         tried ["ringbufferdatadriver", "ringbufferDataDriver", "ringbuffer"]
 
-== Subversion ID
-
-$Id$
-
 == Authors
 
 * Martin Chase <stillflame@FaerieMUD.org>

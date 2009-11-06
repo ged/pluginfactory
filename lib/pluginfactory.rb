@@ -63,10 +63,6 @@ class FactoryError < RuntimeError; end
 #	driver.class #=> MysqlDriver
 #	pgdriver = Driver.create( "PostGresDriver" )
 # 
-# == Subversion ID
-# 
-# $Id$
-# 
 # == Authors
 # 
 # * Martin Chase <stillflame@FaerieMUD.org>
