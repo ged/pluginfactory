@@ -1,10 +1,10 @@
-#!rake
+#!rake -*- ruby -*-
 #
 # PluginFactory rakefile
 #
 # Based on various other Rakefiles, especially one by Ben Bleything
 #
-# Copyright (c) 2007-2009 The FaerieMUD Consortium
+# Copyright (c) 2007-2010 The FaerieMUD Consortium
 #
 # Authors:
 #  * Martin Chase <stillflame@FaerieMUD.org>
@@ -12,11 +12,12 @@
 #
 
 BEGIN {
+	require 'rbconfig'
 	require 'pathname'
 	basedir = Pathname.new( __FILE__ ).dirname
 
 	libdir = basedir + "lib"
-	extdir = basedir + "ext"
+	extdir = libdir + Config::CONFIG['sitearch']
 
 	$LOAD_PATH.unshift( libdir.to_s ) unless $LOAD_PATH.include?( libdir.to_s )
 	$LOAD_PATH.unshift( extdir.to_s ) unless $LOAD_PATH.include?( extdir.to_s )
@@ -30,6 +31,14 @@ rescue LoadError
 	def readline( text )
 		$stderr.print( text.chomp )
 		return $stdin.gets
+	end
+end
+
+begin
+	require 'rubygems'
+rescue LoadError
+	module Gem
+		class Specification; end
 	end
 end
 
@@ -66,9 +75,9 @@ if VERSION_FILE.exist? && buildrev = ENV['CC_BUILD_LABEL']
 	PKG_VERSION = VERSION_FILE.read[ /VERSION\s*=\s*['"](\d+\.\d+\.\d+)['"]/, 1 ] + '.' + buildrev
 elsif VERSION_FILE.exist?
 	PKG_VERSION = VERSION_FILE.read[ /VERSION\s*=\s*['"](\d+\.\d+\.\d+)['"]/, 1 ]
-else
-	PKG_VERSION = '0.0.0'
 end
+
+PKG_VERSION ||= '0.0.0'
 
 PKG_FILE_NAME = "#{PKG_NAME.downcase}-#{PKG_VERSION}"
 GEM_FILE_NAME = "#{PKG_FILE_NAME}.gem"
@@ -120,6 +129,9 @@ RELEASE_FILES = TEXT_FILES +
 
 RELEASE_FILES << LOCAL_RAKEFILE.to_s if LOCAL_RAKEFILE.exist?
 
+RELEASE_ANNOUNCE_ADDRESSES = [
+]
+
 COVERAGE_MINIMUM = ENV['COVERAGE_MINIMUM'] ? Float( ENV['COVERAGE_MINIMUM'] ) : 85.0
 RCOV_EXCLUDES = 'spec,tests,/Library/Ruby,/var/lib,/usr/local/lib'
 RCOV_OPTS = [
@@ -139,7 +151,7 @@ if !RAKE_TASKDIR.exist?
 
 	if ans =~ /^y/i
 		$stderr.puts "Okay, fetching #{RAKE_TASKLIBS_URL} into #{RAKE_TASKDIR}..."
-		system 'hg', 'clone', RAKE_TASKLIBS_URL, RAKE_TASKDIR
+		system 'hg', 'clone', RAKE_TASKLIBS_URL, "./#{RAKE_TASKDIR}"
 		if ! $?.success?
 			fail "Damn. That didn't work. Giving up; maybe try manually fetching?"
 		end
@@ -152,19 +164,20 @@ if !RAKE_TASKDIR.exist?
 end
 
 require RAKE_TASKDIR + 'helpers.rb'
+include RakefileHelpers
 
-# Define some constants that depend on the 'svn' tasklib
+# Set the build ID if the mercurial executable is available
 if hg = which( 'hg' )
 	id = IO.read('|-') or exec hg.to_s, 'id', '-n'
-	PKG_BUILD = id.chomp[ /^[[:xdigit:]]+/ ]
+	PKG_BUILD = 'pre' + (id.chomp[ /^[[:xdigit:]]+/ ] || '1')
 else
-	PKG_BUILD = 0
+	PKG_BUILD = 'pre0'
 end
 SNAPSHOT_PKG_NAME = "#{PKG_FILE_NAME}.#{PKG_BUILD}"
 SNAPSHOT_GEM_NAME = "#{SNAPSHOT_PKG_NAME}.gem"
 
 # Documentation constants
-RDOCDIR = DOCSDIR + 'api'
+API_DOCSDIR = DOCSDIR + 'api'
 RDOC_OPTIONS = [
 	'-w', '4',
 	'-HN',
@@ -173,9 +186,16 @@ RDOC_OPTIONS = [
 	'-t', PKG_NAME,
 	'-W', 'http://deveiate.org/projects/PluginFactory/browser/'
   ]
+YARD_OPTIONS = [
+    '--protected',
+    '-r', 'README',
+	'--exclude', 'extconf\\.rb',
+    '--files', 'ChangeLog,LICENSE',
+	'--output-dir', API_DOCSDIR.to_s,
+  ]
 
 # Release constants
-SMTP_HOST = 'mail.faeriemud.org'
+SMTP_HOST = ""
 SMTP_PORT = 465 # SMTP + SSL
 
 # Project constants
@@ -184,10 +204,6 @@ PROJECT_PUBDIR = '/usr/local/www/public/code'
 PROJECT_DOCDIR = "#{PROJECT_PUBDIR}/#{PKG_NAME}"
 PROJECT_SCPPUBURL = "#{PROJECT_HOST}:#{PROJECT_PUBDIR}"
 PROJECT_SCPDOCURL = "#{PROJECT_HOST}:#{PROJECT_DOCDIR}"
-
-# Rubyforge stuff
-RUBYFORGE_GROUP = 'deveiate'
-RUBYFORGE_PROJECT = 'pluginfactory'
 
 # Gem dependencies: gemname => version
 DEPENDENCIES = {
@@ -201,7 +217,6 @@ DEVELOPMENT_DEPENDENCIES = {
 	'rdoc'        => '>= 2.4.3',
 	'RedCloth'    => '>= 4.0.3',
 	'rspec'       => '>= 1.2.6',
-	'rubyforge'   => '>= 0',
 	'termios'     => '>= 0',
 	'text-format' => '>= 1.0.0',
 	'tmail'       => '>= 1.2.3.1',
@@ -229,9 +244,6 @@ GEMSPEC   = Gem::Specification.new do |gem|
 	gem.authors           = "Martin Chase, Michael Granger"
 	gem.email             = ["stillflame@FaerieMUD.org", "ged@FaerieMUD.org"]
 	gem.homepage          = 'http://deveiate.org/projects/PluginFactory/'
-
-	# Apparently this isn't actually the 'project'?
-	gem.rubyforge_project = RUBYFORGE_GROUP
 
 	gem.has_rdoc          = true
 	gem.rdoc_options      = RDOC_OPTIONS
@@ -289,14 +301,14 @@ import LOCAL_RAKEFILE if LOCAL_RAKEFILE.exist?
 #####################################################################
 
 ### Default task
-task :default  => [:clean, :local, :spec, :rdoc, :package]
+task :default  => [:clean, :local, :spec, :apidocs, :package]
 
 ### Task the local Rakefile can append to -- no-op by default
 task :local
 
 ### Task: clean
-CLEAN.include 'coverage'
-CLOBBER.include 'artifacts', 'coverage.info', PKGDIR
+CLEAN.include 'coverage', '**/*.orig', '**/*.rej'
+CLOBBER.include 'artifacts', 'coverage.info', 'ChangeLog', PKGDIR
 
 ### Task: changelog
 file 'ChangeLog' do |task|
