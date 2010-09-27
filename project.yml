@@ -4,9 +4,10 @@ excluded_pkgfiles: []
 project_pubdir: /usr/local/www/public/code
 project_pubhost: deveiate
 project_homepage: http://deveiate.org/projects/PluginFactory/
+gem_pubhost: rubygems.org
 project_requirements: {}
 
-release_smtphost: ""
+release_smtphost: mail.faeriemud.org
 project_description: |-
   PluginFactory is a mixin module that turns an including class into a factory for
   its derivatives, capable of searching for and loading them by name. This is

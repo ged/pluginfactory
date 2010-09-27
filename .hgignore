@@ -1,3 +1,6 @@
 pkg
 docs/
 ^commit\-msg\.txt$
+.yardoc/
+^ChangeLog
+^release\.(ann|notes)$
