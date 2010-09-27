@@ -77,7 +77,7 @@ class FactoryError < RuntimeError; end
 module PluginFactory
 
 	# Library version
-	VERSION = '1.0.6'
+	VERSION = '1.0.7'
 
 
 	### Logging 
