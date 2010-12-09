@@ -10,7 +10,7 @@ BEGIN {
 	$LOAD_PATH.unshift( libdir ) unless $LOAD_PATH.include?( libdir )
 }
 
-require 'spec'
+require 'rspec'
 require 'logger'
 require 'pluginfactory'
 
@@ -32,7 +32,6 @@ end
 
 
 describe PluginFactory do
-	include PluginFactory::SpecHelpers
 
 	before( :each ) do
 		setup_logging( :fatal )
@@ -59,7 +58,7 @@ describe PluginFactory do
 	end
 
 
-	describe "-extended class" do
+	context "-extended class" do
 
 		it "knows about all of its derivatives" do
 			Plugin.derivatives.keys.should include( 'sub' )
@@ -151,7 +150,7 @@ describe PluginFactory do
 	end
 
 
-	describe "derivative of an extended class" do
+	context "derivative of an extended class" do
 
 		it "knows what type of factory loads it" do
 			TestingPlugin.factory_type.should == 'Plugin'
@@ -165,7 +164,7 @@ describe PluginFactory do
 	end
 
 
-	describe "derivative of an extended class that isn't named <Something>Plugin" do
+	context "derivative of an extended class that isn't named <Something>Plugin" do
 
 		it "is still creatable via its full name" do
 			Plugin.create( 'blacksheep' ).should be_an_instance_of( BlackSheep )
@@ -174,7 +173,7 @@ describe PluginFactory do
 	end
 
 
-	describe "derivative of an extended class in another namespace" do
+	context "derivative of an extended class in another namespace" do
 
 		it "is still creatable via its derivative name" do
 			Plugin.create( 'loadable' ).should be_an_instance_of( Test::LoadablePlugin )
