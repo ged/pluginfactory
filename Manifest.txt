@@ -1,0 +1,10 @@
+.irbrc
+ChangeLog
+History.md
+LICENSE
+Manifest.txt
+README.md
+Rakefile
+lib/pluginfactory.rb
+spec/lib/helpers.rb
+spec/pluginfactory_spec.rb

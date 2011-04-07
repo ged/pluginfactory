@@ -1,0 +1,247 @@
+# pluginfactory
+
+* http://deveiate.org/projects/PluginFactory
+
+
+## Description
+
+PluginFactory is a mixin module that turns an including class into a factory for
+its derivatives, capable of searching for and loading them by name. This is
+useful when you have an abstract base class which defines an interface and basic
+functionality for a part of a larger system, and a collection of subclasses
+which implement the interface for different underlying functionality.
+
+An example of where this might be useful is in a program which talks to a
+database. To avoid coupling it to a specific database, you use a Driver class
+which encapsulates your program's interaction with the database behind a useful
+interface. Now you can create a concrete implementation of the Driver class for
+each kind of database you wish to talk to. If you make the base Driver class a
+PluginFactory, too, you can add new drivers simply by dropping them in a
+directory and using the Driver's `create` method to instantiate them:
+
+### Synopsis
+
+in driver.rb:
+
+	require "PluginFactory"
+	
+	class Driver
+		include PluginFactory
+		def self::derivative_dirs
+		   ["drivers"]
+		end
+	end
+
+in drivers/mysql.rb:
+
+	require 'driver'
+	
+	class MysqlDriver < Driver
+		...implementation...
+	end
+
+in /usr/lib/ruby/1.8/PostgresDriver.rb:
+
+	require 'driver'
+	
+	class PostgresDriver < Driver
+		...implementation...
+	end
+
+elsewhere
+
+	require 'driver'
+	
+	config[:driver_type] #=> "mysql"
+	driver = Driver.create( config[:driver_type] )
+	driver.class #=> MysqlDriver
+	pgdriver = Driver.create( "PostGresDriver" )
+
+### How Plugins Are Loaded
+
+The +create+ class method added to your class by PluginFactory searches for your
+module using several different strategies. It tries various permutations of the
+base class's name in combination with the derivative requested. For example,
+assume we want to make a +DataDriver+ base class, and then use plugins to define
+drivers for different kinds of data sources:
+
+	require 'pluginfactory'
+	
+	class DataDriver
+	  include PluginFactory
+	end
+
+When you attempt to load the 'socket' data-driver class like so:
+
+	DataDriver.create( 'socket' )
+
+PluginFactory searches for modules with the following names:
+
+	'socketdatadriver'
+	'socket_datadriver'
+	'socketDataDriver'
+	'socket_DataDriver'
+	'SocketDataDriver'
+	'Socket_DataDriver'
+	'socket'
+	'Socket'
+
+Obviously the last one will load something other than what is intended, so you
+can also tell PluginFactory that plugins should be loaded from a subdirectory by
+declaring a class method called `derivative_dirs` in the base class. It should
+return an Array that contains a list of subdirectories to try:
+
+	class DataDriver
+	  include PluginFactory
+	  
+	  def self::derivative_dirs
+	    ['drivers']
+	  end
+	end
+
+This will change the list that is required to:
+
+	'drivers/socketdatadriver'
+	'drivers/socket_datadriver'
+	'drivers/socketDataDriver'
+	'drivers/socket_DataDriver'
+	'drivers/SocketDataDriver'
+	'drivers/Socket_DataDriver'
+	'drivers/socket'
+	'drivers/Socket'
+
+If you return more than one subdirectory, each of them will be tried in turn:
+
+	class DataDriver
+	  include PluginFactory
+	  
+	  def self::derivative_dirs
+	    ['drivers', 'datadriver']
+	  end
+	end
+
+will change the search to include:
+
+	'drivers/socketdatadriver'
+	'drivers/socket_datadriver'
+	'drivers/socketDataDriver'
+	'drivers/socket_DataDriver'
+	'drivers/SocketDataDriver'
+	'drivers/Socket_DataDriver'
+	'drivers/socket'
+	'drivers/Socket'
+	'datadriver/socketdatadriver'
+	'datadriver/socket_datadriver'
+	'datadriver/socketDataDriver'
+	'datadriver/socket_DataDriver'
+	'datadriver/SocketDataDriver'
+	'datadriver/Socket_DataDriver'
+	'datadriver/socket'
+	'datadriver/Socket'
+
+If the plugin is not found, a FactoryError is raised, and the message will list
+all the permutations that were tried.
+
+### Logging
+
+If you need a little more insight into what's going on, PluginFactory exposes a
+logging callback which will be called at various points in the process, and will
+include details on what's being attempted.
+
+You can activate logging by setting PluginFactory.logger_callback to something
+that responds to the #call message. It will be called with two arguments, a
+severity level and a message:
+
+	callback.call( :info, "Something happened" )
+
+This is intended to make it easy to hook up to Logger or anything with a similar
+interface:
+
+	require 'pluginfactory'
+	require 'logger'
+	
+	class DataDriver
+	  include PluginFactory
+	  
+	  @logger = Logger.new( $stderr )
+	  @logger.level = Logger::DEBUG
+	  PluginFactory.logger_callback = lambda do |severity, msg|
+	    @logger.send(severity, msg)
+	  end
+	end
+	
+	DataDriver.create( 'ringbuffer' )
+
+this might generate a log that looks like:
+
+	D, [...] DEBUG -- : Loading derivative ringbuffer
+	D, [...] DEBUG -- : Subdirs are: [""]
+	D, [...] DEBUG -- : Path is: ["ringbufferdatadriver", "ringbufferDataDriver", 
+	      "ringbuffer"]...
+	D, [...] DEBUG -- : Trying ringbufferdatadriver...
+	D, [...] DEBUG -- : No module at 'ringbufferdatadriver', trying the next 
+	      alternative: 'no such file to load -- ringbufferdatadriver'
+	D, [...] DEBUG -- : Trying ringbufferDataDriver...
+	D, [...] DEBUG -- : No module at 'ringbufferDataDriver', trying the next 
+	      alternative: 'no such file to load -- ringbufferDataDriver'
+	D, [...] DEBUG -- : Trying ringbuffer...
+	D, [...] DEBUG -- : No module at 'ringbuffer', trying the next alternative: 
+	      'no such file to load -- ringbuffer'
+	D, [...] DEBUG -- : fatals = []
+	E, [...] ERROR -- : Couldn't find a DataDriver named 'ringbuffer': 
+	      tried ["ringbufferdatadriver", "ringbufferDataDriver", "ringbuffer"]
+
+
+
+## Installation
+
+    gem install pluginfactory
+
+
+## Contributing
+
+You can check out the current development source with Mercurial via its
+[Mercurial repo][hg]. Or if you prefer Git, via [its Github mirror][github].
+
+After checking out the source, run:
+
+    $ rake newb
+
+This task will install any missing dependencies, run the tests/specs,
+and generate the API documentation.
+
+
+## License
+
+Copyright (c) 2008-2011, Michael Granger and Martin Chase
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice,
+  this list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+* Neither the name of the author/s, nor the names of the project's
+  contributors may be used to endorse or promote products derived from this
+  software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+[hg]: http://repo.deveiate.org/PluginFactory
+[github]: https://github.com/ged/pluginfactory
+
