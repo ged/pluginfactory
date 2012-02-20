@@ -4,3 +4,4 @@ docs/
 .yardoc/
 ^ChangeLog
 ^release\.(ann|notes)$
+^doc/
