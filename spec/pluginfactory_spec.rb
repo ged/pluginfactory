@@ -54,7 +54,7 @@ describe PluginFactory do
 
 	it "doesn't error when its log method is called if no logging callback is set" do
 		PluginFactory.logger_callback = nil
-		lambda { PluginFactory.log.debug("msg") }.should_not raise_error()
+		expect { PluginFactory.log.debug("msg") }.to_not raise_error()
 	end
 
 
@@ -84,19 +84,23 @@ describe PluginFactory do
 				end
 			end
 
+			exception = nil
 			begin
 				Plugin.create('pugilist')
-			rescue ::Exception => err
-				err.backtrace.first.should =~ /#{__FILE__}/
+			rescue ::RuntimeError => err
+				exception = err
 			else
-				fail "Expected an exception to be raised"
+				fail "Expected an exception to be raised."
 			end
+
+			exception.backtrace.first.should =~ /#{__FILE__}/
 		end
 
 		it "will refuse to create an object other than one of its derivatives" do
 			class Doppelgaenger; end
-			lambda { Plugin.create(Doppelgaenger) }.
-				should raise_error( ArgumentError, /is not a descendent of/ )
+			expect {
+				Plugin.create(Doppelgaenger)
+			}.to raise_error( ArgumentError, /is not a descendent of/ )
 		end
 
 
@@ -122,8 +126,9 @@ describe PluginFactory do
 				at_least(6).times.
 				and_return {|path| raise LoadError, "path" }
 
-			lambda { Plugin.create('scintillating') }.
-				should raise_error( FactoryError, /couldn't find a \S+ named \S+.*tried \[/i )
+			expect {
+				Plugin.create('scintillating')
+			}.to raise_error( FactoryError, /couldn't find a \S+ named \S+.*tried \[/i )
 		end
 
 
@@ -131,8 +136,9 @@ describe PluginFactory do
 			# at least 6 -> 3 variants * 2 paths
 			Plugin.should_receive( :require ).and_return( true )
 
-			lambda { Plugin.create('corruscating') }.
-				should raise_error( FactoryError, /Require of '\S+' succeeded, but didn't load a Plugin/i )
+			expect {
+				Plugin.create('corruscating')
+			}.to raise_error( FactoryError, /Require of '\S+' succeeded, but didn't load a Plugin/i )
 		end
 
 
@@ -144,8 +150,9 @@ describe PluginFactory do
 				raise ScriptError, "error while parsing #{path}"
 			}
 
-			lambda { Plugin.create('portable') }.
-				should raise_error( ScriptError, /error while parsing/ )
+			expect {
+				Plugin.create('portable')
+			}.to raise_error( ScriptError, /error while parsing/ )
 		end
 	end
 
@@ -158,8 +165,9 @@ describe PluginFactory do
 
 		it "raises a FactoryError if it can't figure out what type of factory loads it" do
 			TestingPlugin.stub!( :ancestors ).and_return( [] )
-			lambda { TestingPlugin.factory_type }.
-				should raise_error( FactoryError, /couldn't find factory base/i )
+			expect {
+				TestingPlugin.factory_type
+			}.to raise_error( FactoryError, /couldn't find factory base/i )
 		end
 	end
 
