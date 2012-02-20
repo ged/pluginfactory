@@ -1,0 +1,12 @@
+# Settings
+projectDirectory     = "$CWD"
+windowTitle          = "${CWD/^.*\///} «$TM_DISPLAYNAME»"
+excludeInFileChooser = "{$exclude,.hg}"
+
+TM_RUBY = "${HOME}/.rvm/bin/rvm-auto-ruby"
+
+[ source.ruby ]
+softTabs         = false
+tabSize          = 4
+
+
