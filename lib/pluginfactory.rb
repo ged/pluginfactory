@@ -23,12 +23,12 @@ class FactoryError < RuntimeError; end
 #
 # == Creation Argument Variants
 #
-# The +create+ class method added to your class by PluginFactory searches for your module using 
+# The +create+ class method added to your class by PluginFactory searches for your module using
 #
 # == Synopsis
-# 
+#
 # in driver.rb:
-# 
+#
 #	require "PluginFactory"
 #
 #	class Driver
@@ -37,42 +37,66 @@ class FactoryError < RuntimeError; end
 #		   ["drivers"]
 #		end
 #	end
-# 
+#
 # in drivers/mysql.rb:
-# 
+#
 #	require 'driver'
 #
 #	class MysqlDriver < Driver
 #		...implementation...
 #	end
-# 
+#
 # in /usr/lib/ruby/1.8/PostgresDriver.rb:
-# 
+#
 #	require 'driver'
 #
 #	class PostgresDriver < Driver
 #		...implementation...
 #	end
-# 
+#
 # elsewhere
-# 
+#
 #	require 'driver'
 #
 #	config[:driver_type] #=> "mysql"
 #	driver = Driver.create( config[:driver_type] )
 #	driver.class #=> MysqlDriver
 #	pgdriver = Driver.create( "PostGresDriver" )
-# 
+#
 # == Authors
-# 
+#
 # * Martin Chase <stillflame@FaerieMUD.org>
 # * Michael Granger <ged@FaerieMUD.org>
-# 
-# :include: LICENSE
 #
-#---
+# == License
 #
-# Please see the file LICENSE for licensing details.
+# Copyright (c) 2008-2012 Michael Granger and Martin Chase
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+#   * Redistributions of source code must retain the above copyright notice,
+#     this list of conditions and the following disclaimer.
+#
+#   * Redistributions in binary form must reproduce the above copyright notice,
+#     this list of conditions and the following disclaimer in the documentation
+#     and/or other materials provided with the distribution.
+#
+#   * Neither the name of the author/s, nor the names of the project's
+#     contributors may be used to endorse or promote products derived from this
+#     software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 module PluginFactory
 
@@ -80,7 +104,7 @@ module PluginFactory
 	VERSION = '1.0.7'
 
 
-	### Logging 
+	### Logging
 	@default_logger = Logger.new( $stderr )
 	@default_logger.level = $DEBUG ? Logger::DEBUG : Logger::WARN
 
@@ -161,7 +185,7 @@ module PluginFactory
 		base = nil
 		self.ancestors.each do |klass|
 			if klass.instance_variables.include?( :@derivatives ) ||
-				klass.instance_variables.include?( "@derivatives" ) 
+				klass.instance_variables.include?( "@derivatives" )
 				base = klass
 				break
 			end

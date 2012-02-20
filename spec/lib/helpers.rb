@@ -148,7 +148,7 @@ end # module PluginFactory
 
 
 ### Mock with Rspec
-Rspec.configure do |c|
+RSpec.configure do |c|
 	c.mock_with :rspec
 	c.include( PluginFactory::SpecHelpers )
 end

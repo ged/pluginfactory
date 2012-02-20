@@ -1,9 +1,9 @@
-# pluginfactory
+= pluginfactory
 
 * http://deveiate.org/projects/PluginFactory
 
 
-## Description
+== Description
 
 PluginFactory is a mixin module that turns an including class into a factory for
 its derivatives, capable of searching for and loading them by name. This is
@@ -19,7 +19,7 @@ each kind of database you wish to talk to. If you make the base Driver class a
 PluginFactory, too, you can add new drivers simply by dropping them in a
 directory and using the Driver's `create` method to instantiate them:
 
-### Synopsis
+=== Synopsis
 
 in driver.rb:
 
@@ -57,7 +57,7 @@ elsewhere
 	driver.class #=> MysqlDriver
 	pgdriver = Driver.create( "PostGresDriver" )
 
-### How Plugins Are Loaded
+=== How Plugins Are Loaded
 
 The +create+ class method added to your class by PluginFactory searches for your
 module using several different strategies. It tries various permutations of the
@@ -93,7 +93,7 @@ return an Array that contains a list of subdirectories to try:
 
 	class DataDriver
 	  include PluginFactory
-	  
+	
 	  def self::derivative_dirs
 	    ['drivers']
 	  end
@@ -114,7 +114,7 @@ If you return more than one subdirectory, each of them will be tried in turn:
 
 	class DataDriver
 	  include PluginFactory
-	  
+	
 	  def self::derivative_dirs
 	    ['drivers', 'datadriver']
 	  end
@@ -142,33 +142,24 @@ will change the search to include:
 If the plugin is not found, a FactoryError is raised, and the message will list
 all the permutations that were tried.
 
-### Logging
+=== Logging
 
-If you need a little more insight into what's going on, PluginFactory exposes a
-logging callback which will be called at various points in the process, and will
-include details on what's being attempted.
+If you need a little more insight into what's going on, PluginFactory uses
+'Logger' from the standard library. Just set its logger to your own to include
+log messages about plugins being loaded:
 
-You can activate logging by setting PluginFactory.logger_callback to something
-that responds to the #call message. It will be called with two arguments, a
-severity level and a message:
-
-	callback.call( :info, "Something happened" )
-
-This is intended to make it easy to hook up to Logger or anything with a similar
-interface:
 
 	require 'pluginfactory'
 	require 'logger'
 	
 	class DataDriver
 	  include PluginFactory
-	  
-	  @logger = Logger.new( $stderr )
-	  @logger.level = Logger::DEBUG
-	  PluginFactory.logger_callback = lambda do |severity, msg|
-	    @logger.send(severity, msg)
-	  end
+	
 	end
+	
+	$logger = Logger.new( $stderr )
+	$logger.level = Logger::DEBUG
+	PluginFactory.logger = $logger
 	
 	DataDriver.create( 'ringbuffer' )
 
@@ -193,15 +184,16 @@ this might generate a log that looks like:
 
 
 
-## Installation
+== Installation
 
     gem install pluginfactory
 
 
-## Contributing
+== Contributing
 
 You can check out the current development source with Mercurial via its
-[Mercurial repo][hg]. Or if you prefer Git, via [its Github mirror][github].
+{Mercurial repo}[http://repo.deveiate.org/PluginFactory]. Or if you prefer
+Git, via {its Github mirror}[https://github.com/ged/pluginfactory].
 
 After checking out the source, run:
 
@@ -211,9 +203,9 @@ This task will install any missing dependencies, run the tests/specs,
 and generate the API documentation.
 
 
-## License
+== License
 
-Copyright (c) 2008-2011, Michael Granger and Martin Chase
+Copyright (c) 2008-2012, Michael Granger and Martin Chase
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -242,6 +234,4 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-[hg]: http://repo.deveiate.org/PluginFactory
-[github]: https://github.com/ged/pluginfactory
 
